@@ -21,3 +21,21 @@ describe('Game Engine: canPour', () => {
     expect(canPour([], ['blue'])).toBe(false);
   });
 });
+
+import { generateLevel } from './engine';
+
+describe('Game Engine: generateLevel', () => {
+  it('generates a valid level with correct tube count', () => {
+    const level = generateLevel(3, 2);
+    expect(level.length).toBe(5);
+    
+    // Total colors should be 3 * 4 = 12
+    const allColors = level.flat();
+    expect(allColors.length).toBe(12);
+    
+    // No tube should exceed capacity 4
+    level.forEach((tube: string[]) => {
+      expect(tube.length).toBeLessThanOrEqual(4);
+    });
+  });
+});
