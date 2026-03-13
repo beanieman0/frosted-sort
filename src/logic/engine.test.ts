@@ -1,4 +1,5 @@
-import { canPour } from './engine';
+// All imports at the top — required for TypeScript/Jest to work correctly
+import { canPour, generateLevel, getVisibleLayers, isWin } from './engine';
 
 describe('Game Engine: canPour', () => {
   it('allows pouring into an empty tube', () => {
@@ -22,8 +23,6 @@ describe('Game Engine: canPour', () => {
   });
 });
 
-import { generateLevel } from './engine';
-
 describe('Game Engine: generateLevel', () => {
   it('generates a valid level with correct tube count', () => {
     const level = generateLevel(3, 2);
@@ -40,11 +39,8 @@ describe('Game Engine: generateLevel', () => {
   });
 });
 
-import { getVisibleLayers, isWin } from './engine';
-
 describe('Game Engine: getVisibleLayers', () => {
   // The "hidden" mechanic: only the top 2 layers are visible, bottom 2 are hidden (frosted).
-  // getVisibleLayers returns only the color values for the visible top portion.
   it('returns all layers when tube has 2 or fewer', () => {
     expect(getVisibleLayers(['red', 'blue'], 2)).toEqual(['red', 'blue']);
   });
