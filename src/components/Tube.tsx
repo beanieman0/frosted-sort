@@ -3,13 +3,27 @@ import { View, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { BlurView } from 'expo-blur';
 
 interface TubeProps {
-  colors: string[];        // All colors in tube, index 0 = bottom
+  colors: string[];
   isSelected: boolean;
-  visibleCount?: number;   // How many layers from the top are visible (rest hidden by frost)
+  visibleCount?: number;
   onPress: () => void;
+  // Theme-aware colors passed from parent
+  accentColor?: string;
+  glassColor?: string;
+  borderColor?: string;
+  frostedTint?: 'light' | 'dark';
 }
 
-export function Tube({ colors, isSelected, visibleCount = 2, onPress }: TubeProps) {
+export function Tube({
+  colors,
+  isSelected,
+  visibleCount = 2,
+  onPress,
+  accentColor = '#4ECDC4',
+  glassColor = 'rgba(255,255,255,0.06)',
+  borderColor = 'rgba(255,255,255,0.3)',
+  frostedTint = 'dark',
+}: TubeProps) {
   const translateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -19,9 +33,6 @@ export function Tube({ colors, isSelected, visibleCount = 2, onPress }: TubeProp
     }).start();
   }, [isSelected]);
 
-  // Calculate the frosted area height:
-  // If tube has 4 layers and visibleCount=2, bottom 2 are hidden (50%)
-  // If tube is fully revealed (visibleCount=4), frosted area = 0%
   const totalSlots = 4;
   const hiddenCount = Math.max(0, totalSlots - visibleCount);
   const frostedHeightPercent = (hiddenCount / totalSlots) * 100;
@@ -29,10 +40,14 @@ export function Tube({ colors, isSelected, visibleCount = 2, onPress }: TubeProp
   return (
     <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
       <Animated.View style={[styles.tubeContainer, { transform: [{ translateY }] }]}>
-        {/* The glass tube */}
-        <View style={[styles.glassOutline, isSelected && styles.selectedGlow]}>
+        <View
+          style={[
+            styles.glassOutline,
+            { backgroundColor: glassColor, borderColor: isSelected ? accentColor : borderColor },
+            isSelected && { shadowColor: accentColor },
+          ]}
+        >
           <View style={styles.liquidContainer}>
-            {/* 4 fixed slots from bottom (index 0) to top (index 3) */}
             {[0, 1, 2, 3].map((index) => {
               const color = colors[index];
               return (
@@ -41,7 +56,7 @@ export function Tube({ colors, isSelected, visibleCount = 2, onPress }: TubeProp
                   style={[
                     styles.liquidLayer,
                     { backgroundColor: color || 'transparent' },
-                    index === 0 && { borderBottomLeftRadius: 18, borderBottomRightRadius: 18 }
+                    index === 0 && { borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
                   ]}
                 />
               );
@@ -49,10 +64,9 @@ export function Tube({ colors, isSelected, visibleCount = 2, onPress }: TubeProp
           </View>
         </View>
 
-        {/* Frosted Glass Overlay — covers the hidden bottom portion */}
         {frostedHeightPercent > 0 && (
           <View style={[styles.frostedWrapper, { height: `${frostedHeightPercent}%` }]}>
-            <BlurView intensity={90} tint="light" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={90} tint={frostedTint} style={StyleSheet.absoluteFill} />
             <View style={styles.frostedHighlight} />
           </View>
         )}
@@ -73,20 +87,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderWidth: 2.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
     borderTopWidth: 0,
     borderBottomLeftRadius: 22,
     borderBottomRightRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     overflow: 'hidden',
-  },
-  selectedGlow: {
-    borderColor: '#4ECDC4',
-    shadowColor: '#4ECDC4',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
+    shadowOpacity: 0.7,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 6,
   },
   liquidContainer: {
     flex: 1,
@@ -108,7 +116,7 @@ const styles = StyleSheet.create({
   frostedHighlight: {
     ...StyleSheet.absoluteFillObject,
     borderTopWidth: 1,
-    borderColor: 'rgba(255,255,255,0.7)',
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
 });

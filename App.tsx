@@ -1,28 +1,43 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, StatusBar, SafeAreaView, TouchableOpacity, Modal, Platform } from 'react-native';
+import {
+  StyleSheet, View, Text, StatusBar, SafeAreaView,
+  TouchableOpacity, Modal, Platform, Vibration
+} from 'react-native';
 import { Tube } from './src/components/Tube';
+import { SettingsModal } from './src/components/SettingsModal';
+import { SettingsProvider, useSettings } from './src/context/SettingsContext';
 import { canPour, isWin, getVisibleLayers, generateLevel } from './src/logic/engine';
-import { playPourSound, playTapSound, playWinSound } from './src/utils/sounds';
+import {
+  playPourSound, playTapSound, playWinSound, setSoundSystemVolume
+} from './src/utils/sounds';
 
 const TUBES_FILLED = 4;
 const TUBES_EMPTY = 2;
-// How many top layers are visible (the rest are hidden by frosted glass)
 const VISIBLE_LAYERS = 2;
 
-export default function App() {
+// ----- Inner game component (consumes SettingsContext) -----
+function Game() {
+  const { settings, colors } = useSettings();
+
   const [tubes, setTubes] = useState<string[][]>(() => generateLevel(TUBES_FILLED, TUBES_EMPTY));
-  const [selectedTubeIndex, setSelectedTubeIndex] = useState<number | null>(null);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [hasWon, setHasWon] = useState(false);
   const [level, setLevel] = useState(1);
-  // revealedTubes: set of tube indices where the user paid to reveal all layers
   const [revealedTubes, setRevealedTubes] = useState<Set<number>>(new Set());
-  const [showAdModal, setShowAdModal] = useState<number | null>(null); // which tube index the ad is for
+  const [showAdFor, setShowAdFor] = useState<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
-  // Check for win after every move
+  // Sync sound volume whenever settings change
+  useEffect(() => {
+    setSoundSystemVolume(settings.soundVolume);
+  }, [settings.soundVolume]);
+
+  // Check win after every move
   useEffect(() => {
     if (isWin(tubes)) {
       setTimeout(() => {
-        playWinSound();
+        if (settings.soundVolume > 0) playWinSound();
+        if (settings.vibrationOn && Platform.OS !== 'web') Vibration.vibrate([0, 100, 80, 100]);
         setHasWon(true);
       }, 300);
     }
@@ -31,99 +46,99 @@ export default function App() {
   const handleTubePress = useCallback((index: number) => {
     if (hasWon) return;
 
-    if (selectedTubeIndex === null) {
+    if (selectedIdx === null) {
       if (tubes[index].length > 0) {
-        playTapSound();
-        setSelectedTubeIndex(index);
+        if (settings.soundVolume > 0) playTapSound();
+        if (settings.vibrationOn && Platform.OS !== 'web') Vibration.vibrate(30);
+        setSelectedIdx(index);
       }
       return;
     }
+    if (selectedIdx === index) { setSelectedIdx(null); return; }
 
-    if (selectedTubeIndex === index) {
-      setSelectedTubeIndex(null);
-      return;
-    }
+    const src = tubes[selectedIdx];
+    const tgt = tubes[index];
 
-    const sourceTube = tubes[selectedTubeIndex];
-    const targetTube = tubes[index];
-
-    if (canPour(sourceTube, targetTube)) {
-      playPourSound();
+    if (canPour(src, tgt)) {
+      if (settings.soundVolume > 0) playPourSound();
+      if (settings.vibrationOn && Platform.OS !== 'web') Vibration.vibrate(20);
       const newTubes = tubes.map(t => [...t]);
-      const transferredColor = newTubes[selectedTubeIndex].pop() as string;
-      newTubes[index].push(transferredColor);
+      const color = newTubes[selectedIdx].pop() as string;
+      newTubes[index].push(color);
       setTubes(newTubes);
-      setSelectedTubeIndex(null);
+      setSelectedIdx(null);
     } else {
-      if (targetTube.length > 0) {
-        playTapSound();
-        setSelectedTubeIndex(index);
-      } else {
-        setSelectedTubeIndex(null);
-      }
+      if (tgt.length > 0) { setSelectedIdx(index); } else { setSelectedIdx(null); }
     }
-  }, [hasWon, tubes, selectedTubeIndex]);
+  }, [hasWon, tubes, selectedIdx, settings]);
 
-  const handleNextLevel = () => {
+  const nextLevel = () => {
     setTubes(generateLevel(TUBES_FILLED, TUBES_EMPTY));
-    setSelectedTubeIndex(null);
+    setSelectedIdx(null);
     setHasWon(false);
     setRevealedTubes(new Set());
     setLevel(l => l + 1);
   };
 
-  // Ad reveal: user taps the "👁 Reveal" button on a tube
-  const handleRevealPress = (index: number) => {
-    setShowAdModal(index);
+  const handleWatchAd = () => {
+    if (showAdFor === null) return;
+    const next = new Set(revealedTubes);
+    next.add(showAdFor);
+    setRevealedTubes(next);
+    setShowAdFor(null);
   };
 
-  // Simulate watching an ad — in production, show real rewarded ad here
-  const handleWatchAd = () => {
-    if (showAdModal === null) return;
-    const newRevealed = new Set(revealedTubes);
-    newRevealed.add(showAdModal);
-    setRevealedTubes(newRevealed);
-    setShowAdModal(null);
-  };
+  const bg = colors.background;
+  const isLight = settings.theme === 'light';
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
+    <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
+      <StatusBar
+        barStyle={isLight ? 'dark-content' : 'light-content'}
+        backgroundColor={bg}
+      />
 
-      {/* Header */}
+      {/* ─── Header ─── */}
       <View style={styles.header}>
-        <Text style={styles.title}>Frosted Sort</Text>
-        <Text style={styles.levelText}>Level {level}</Text>
-        <Text style={styles.subtitle}>Sort the colors. Reveal what's hidden.</Text>
+        <View style={styles.headerSide} />
+        <View style={styles.headerCenter}>
+          <Text style={[styles.title, { color: colors.title }]}>Frosted Sort</Text>
+          <Text style={[styles.levelText, { color: colors.accent }]}>Level {level}</Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.settingsBtn, { backgroundColor: isLight ? '#DDE6F5' : '#16213e' }]}
+          onPress={() => setShowSettings(true)}
+        >
+          <Text style={styles.settingsIcon}>⚙️</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Game Board */}
+      <Text style={[styles.subtitle, { color: colors.subtitle }]}>
+        Sort the colors. Reveal what's hidden.
+      </Text>
+
+      {/* ─── Game Board ─── */}
       <View style={styles.gameBoard}>
         {tubes.map((tubeColors, index) => {
           const isRevealed = revealedTubes.has(index);
-          // Decide which colors are visible
-          const visibleColors = isRevealed
-            ? tubeColors  // Show all layers if user revealed it
-            : getVisibleLayers(tubeColors, VISIBLE_LAYERS).concat(
-                // Pad from below with 'hidden' markers for rendering
-                tubeColors.slice(0, Math.max(0, tubeColors.length - VISIBLE_LAYERS)).map(() => 'HIDDEN')
-              );
-
           return (
             <View key={index} style={styles.tubeWithButton}>
               <Tube
                 colors={tubeColors}
                 visibleCount={isRevealed ? 4 : VISIBLE_LAYERS}
-                isSelected={selectedTubeIndex === index}
+                isSelected={selectedIdx === index}
                 onPress={() => handleTubePress(index)}
+                accentColor={colors.accent}
+                glassColor={colors.tubeGlass}
+                borderColor={colors.tubeBorder}
+                frostedTint={colors.frostedTint}
               />
-              {/* Only show reveal button if tube has hidden layers */}
               {tubeColors.length > VISIBLE_LAYERS && !isRevealed && (
                 <TouchableOpacity
-                  style={styles.revealButton}
-                  onPress={() => handleRevealPress(index)}
+                  style={[styles.revealBtn, { borderColor: colors.accent }]}
+                  onPress={() => setShowAdFor(index)}
                 >
-                  <Text style={styles.revealButtonText}>👁 Reveal</Text>
+                  <Text style={[styles.revealBtnText, { color: colors.accent }]}>👁 Reveal</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -131,37 +146,42 @@ export default function App() {
         })}
       </View>
 
-      {/* Win Screen Modal */}
+      {/* ─── Settings Modal ─── */}
+      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
+
+      {/* ─── Win Modal ─── */}
       <Modal visible={hasWon} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.winCard}>
+        <View style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}>
+          <View style={[styles.winCard, { backgroundColor: colors.surface, borderColor: colors.accent }]}>
             <Text style={styles.winEmoji}>🎉</Text>
-            <Text style={styles.winTitle}>Sorted!</Text>
-            <Text style={styles.winSubtitle}>Level {level} complete</Text>
-            <TouchableOpacity style={styles.nextButton} onPress={handleNextLevel}>
-              <Text style={styles.nextButtonText}>Next Level →</Text>
+            <Text style={[styles.winTitle, { color: colors.title }]}>Sorted!</Text>
+            <Text style={[styles.winSub, { color: colors.subtitle }]}>Level {level} complete</Text>
+            <TouchableOpacity
+              style={[styles.nextBtn, { backgroundColor: colors.buttonBg }]}
+              onPress={nextLevel}
+            >
+              <Text style={[styles.nextBtnText, { color: colors.buttonText }]}>Next Level →</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Ad Modal - Simulating a "Watch Ad to Reveal" flow */}
-      <Modal visible={showAdModal !== null} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.adCard}>
-            <Text style={styles.adTitle}>🔍 Reveal Hidden Layers</Text>
-            <Text style={styles.adBody}>
+      {/* ─── Reveal-Ad Modal ─── */}
+      <Modal visible={showAdFor !== null} transparent animationType="slide">
+        <View style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}>
+          <View style={[styles.adCard, { backgroundColor: colors.surface, borderColor: '#FFE66D' }]}>
+            <Text style={[styles.adTitle, { color: colors.title }]}>🔍 Reveal Hidden Layers</Text>
+            <Text style={[styles.adBody, { color: colors.subtitle }]}>
               Watch a short ad to reveal all hidden layers in this tube!
             </Text>
-            {/* In production: show actual rewarded ad here, then call handleWatchAd in callback */}
-            <View style={styles.adPlaceholder}>
-              <Text style={styles.adPlaceholderText}>[ Ad Plays Here ]</Text>
+            <View style={[styles.adBox, { backgroundColor: isLight ? '#EFF3FF' : '#0f3460' }]}>
+              <Text style={[styles.adBoxText, { color: colors.subtitle }]}>[ Ad Plays Here ]</Text>
             </View>
-            <TouchableOpacity style={styles.watchAdButton} onPress={handleWatchAd}>
-              <Text style={styles.watchAdButtonText}>✅ Claim Reveal</Text>
+            <TouchableOpacity style={styles.watchAdBtn} onPress={handleWatchAd}>
+              <Text style={styles.watchAdBtnText}>✅ Claim Reveal</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.dismissButton} onPress={() => setShowAdModal(null)}>
-              <Text style={styles.dismissButtonText}>No thanks</Text>
+            <TouchableOpacity onPress={() => setShowAdFor(null)} style={styles.dismissBtn}>
+              <Text style={[styles.dismissText, { color: colors.subtitle }]}>No thanks</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -170,155 +190,75 @@ export default function App() {
   );
 }
 
+// ----- Root with Provider -----
+export default function App() {
+  return (
+    <SettingsProvider>
+      <Game />
+    </SettingsProvider>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-  },
+  container: { flex: 1 },
   header: {
-    paddingTop: 40,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 30,
+    paddingHorizontal: 20,
+    paddingTop: 36,
+    paddingBottom: 4,
   },
-  title: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#E8F4FD',
-    letterSpacing: 2,
+  headerSide: { width: 44 },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  title: { fontSize: 30, fontWeight: '800', letterSpacing: 1.5 },
+  levelText: { fontSize: 13, fontWeight: '600', letterSpacing: 3, marginTop: 2, textTransform: 'uppercase' },
+  settingsBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    justifyContent: 'center', alignItems: 'center',
   },
-  levelText: {
-    fontSize: 14,
-    color: '#4ECDC4',
-    fontWeight: '600',
-    marginTop: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 3,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#6b7db3',
-    marginTop: 6,
-  },
+  settingsIcon: { fontSize: 22 },
+  subtitle: { textAlign: 'center', fontSize: 13, marginBottom: 16 },
   gameBoard: {
     flex: 1,
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 12,
   },
-  tubeWithButton: {
-    alignItems: 'center',
-    marginHorizontal: 4,
+  tubeWithButton: { alignItems: 'center', marginHorizontal: 4 },
+  revealBtn: {
+    marginTop: 8, paddingHorizontal: 10, paddingVertical: 5,
+    backgroundColor: 'transparent',
+    borderRadius: 12, borderWidth: 1,
   },
-  revealButton: {
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: 'rgba(78, 205, 196, 0.25)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#4ECDC4',
-  },
-  revealButtonText: {
-    color: '#4ECDC4',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  // Win Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  revealBtnText: { fontSize: 11, fontWeight: '600' },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   winCard: {
-    backgroundColor: '#16213e',
-    borderRadius: 24,
-    padding: 36,
-    alignItems: 'center',
-    width: '80%',
-    borderWidth: 1,
-    borderColor: '#4ECDC4',
+    borderRadius: 24, padding: 36, alignItems: 'center',
+    width: '80%', borderWidth: 1,
   },
-  winEmoji: {
-    fontSize: 52,
-    marginBottom: 12,
-  },
-  winTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#E8F4FD',
-  },
-  winSubtitle: {
-    fontSize: 16,
-    color: '#6b7db3',
-    marginTop: 4,
-    marginBottom: 24,
-  },
-  nextButton: {
-    backgroundColor: '#4ECDC4',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 16,
-  },
-  nextButtonText: {
-    color: '#1a1a2e',
-    fontWeight: '800',
-    fontSize: 16,
-  },
-  // Ad Modal
+  winEmoji: { fontSize: 52, marginBottom: 12 },
+  winTitle: { fontSize: 28, fontWeight: '800' },
+  winSub: { fontSize: 16, marginTop: 4, marginBottom: 24 },
+  nextBtn: { paddingHorizontal: 32, paddingVertical: 14, borderRadius: 16 },
+  nextBtnText: { fontWeight: '800', fontSize: 16 },
   adCard: {
-    backgroundColor: '#16213e',
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-    width: '85%',
-    borderWidth: 1,
-    borderColor: '#FFE66D',
+    borderRadius: 24, padding: 24, alignItems: 'center',
+    width: '85%', borderWidth: 1,
   },
-  adTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#E8F4FD',
-    marginBottom: 8,
+  adTitle: { fontSize: 20, fontWeight: '800', marginBottom: 8 },
+  adBody: { fontSize: 14, textAlign: 'center', marginBottom: 16 },
+  adBox: {
+    width: '100%', height: 110, borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 16,
   },
-  adBody: {
-    fontSize: 14,
-    color: '#6b7db3',
-    textAlign: 'center',
-    marginBottom: 16,
+  adBoxText: { fontSize: 14 },
+  watchAdBtn: {
+    backgroundColor: '#FFE66D', paddingHorizontal: 28,
+    paddingVertical: 12, borderRadius: 14, marginBottom: 10,
   },
-  adPlaceholder: {
-    width: '100%',
-    height: 120,
-    backgroundColor: '#0f3460',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  adPlaceholderText: {
-    color: '#6b7db3',
-    fontSize: 14,
-  },
-  watchAdButton: {
-    backgroundColor: '#FFE66D',
-    paddingHorizontal: 28,
-    paddingVertical: 12,
-    borderRadius: 14,
-    marginBottom: 10,
-  },
-  watchAdButtonText: {
-    color: '#1a1a2e',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  dismissButton: {
-    padding: 8,
-  },
-  dismissButtonText: {
-    color: '#6b7db3',
-    fontSize: 13,
-  },
+  watchAdBtnText: { color: '#1a1a2e', fontWeight: '800', fontSize: 15 },
+  dismissBtn: { padding: 8 },
+  dismissText: { fontSize: 13 },
 });

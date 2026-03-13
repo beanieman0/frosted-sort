@@ -1,17 +1,22 @@
-import { Audio } from 'expo-av';
+/**
+ * Web Audio API sound utility for ASMR-style game sounds.
+ * Volume is controlled by the soundVolume setting (0–1).
+ * All sounds use soft fade-in/fade-out to avoid annoying clicks.
+ */
 
-// We use short, synthesized base64-encoded WAV tones as sounds
-// so the app has zero external dependencies for audio.
-// These are minimal beep/click/chime sounds generated procedurally.
+let _volume = 0.6; // default until settings context updates it
 
-let pourSound: Audio.Sound | null = null;
-let winSound: Audio.Sound | null = null;
-let tapSound: Audio.Sound | null = null;
+export function setSoundSystemVolume(v: number) {
+  _volume = v;
+}
 
-// Expo Audio requires files, so we use short web Audio API synthesis on web
-// and expo-av on native. This utility abstracts both.
-
-function playWebTone(frequency: number, duration: number, type: OscillatorType = 'sine', gain: number = 0.15) {
+function playTone(
+  frequency: number,
+  duration: number,
+  type: OscillatorType = 'sine',
+  gainMultiplier: number = 1.0
+) {
+  if (_volume === 0) return;
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const oscillator = ctx.createOscillator();
@@ -23,41 +28,33 @@ function playWebTone(frequency: number, duration: number, type: OscillatorType =
     oscillator.type = type;
     oscillator.frequency.setValueAtTime(frequency, ctx.currentTime);
 
-    // Soft fade-in and fade-out to avoid "clicking" sound artifacts
+    const peakGain = _volume * gainMultiplier * 0.18;
     gainNode.gain.setValueAtTime(0, ctx.currentTime);
-    gainNode.gain.linearRampToValueAtTime(gain, ctx.currentTime + 0.02);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    gainNode.gain.linearRampToValueAtTime(peakGain, ctx.currentTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
 
     oscillator.start(ctx.currentTime);
-    oscillator.stop(ctx.currentTime + duration);
+    oscillator.stop(ctx.currentTime + duration + 0.05);
   } catch (_e) {
-    // Silently ignore if audio is not available
+    // Silently ignore if AudioContext is unavailable
   }
 }
 
-/**
- * Plays a satisfying low "glug" sound when liquid is poured.
- * Descending frequency gives it that "liquid filling" feel.
- */
+/** Soft descending "glug" for pouring liquid */
 export function playPourSound() {
-  playWebTone(350, 0.15, 'sine', 0.12);
-  // A quick second tone offset gives a "thicker liquid" feel
-  setTimeout(() => playWebTone(300, 0.1, 'sine', 0.07), 80);
+  playTone(350, 0.15, 'sine', 0.7);
+  setTimeout(() => playTone(300, 0.1, 'sine', 0.4), 80);
 }
 
-/**
- * Plays a soft, satisfying UI tap (when selecting a tube).  
- */
+/** Soft click for selecting a tube */
 export function playTapSound() {
-  playWebTone(600, 0.08, 'triangle', 0.08);
+  playTone(600, 0.08, 'triangle', 0.45);
 }
 
-/**
- * Plays a pleasant multi-note win chime.
- */
+/** Pleasant C-major chord arpeggio for winning */
 export function playWinSound() {
-  const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6 - a C major chord
+  const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
   notes.forEach((freq, i) => {
-    setTimeout(() => playWebTone(freq, 0.4, 'sine', 0.12), i * 120);
+    setTimeout(() => playTone(freq, 0.4, 'sine', 0.65), i * 120);
   });
 }
