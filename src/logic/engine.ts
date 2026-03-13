@@ -47,3 +47,25 @@ export function generateLevel(filledCount: number, emptyCount: number): string[]
 
   return tubes;
 }
+
+/**
+ * Returns only the top N visible layers of a tube.
+ * Bottom layers are hidden by the frosted glass effect.
+ * index 0 = bottom, higher = closer to top (visible).
+ */
+export function getVisibleLayers(tube: string[], visibleCount: number = 2): string[] {
+  if (tube.length === 0) return [];
+  return tube.slice(Math.max(0, tube.length - visibleCount));
+}
+
+/**
+ * Checks if the puzzle is solved.
+ * All non-empty tubes must contain only one unique color.
+ */
+export function isWin(tubes: string[][]): boolean {
+  return tubes.every(tube => {
+    if (tube.length === 0) return true;
+    const firstColor = tube[0];
+    return tube.every(color => color === firstColor);
+  });
+}
