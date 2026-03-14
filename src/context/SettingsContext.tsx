@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 export type Theme = 'dark' | 'light';
-export type TubeSkin = 'default' | 'neon' | 'icy' | 'golden' | 'pastel';
+export type TubeSkin = 'default' | 'neon' | 'icy' | 'golden' | 'pastel' | 'crystal' | 'lava' | 'ocean' | 'forest' | 'space';
 
 export interface ThemeColors {
   background: string;
@@ -55,6 +55,11 @@ const SKIN_OVERRIDES: Record<TubeSkin, Partial<ThemeColors>> = {
   icy: { tubeGlass: 'rgba(200,240,255,0.2)', tubeBorder: '#c8f0ff', frostedTint: 'light' },
   golden: { tubeGlass: 'rgba(255,215,0,0.1)', tubeBorder: '#ffd700', frostedTint: 'dark' },
   pastel: { tubeGlass: 'rgba(255,228,225,0.2)', tubeBorder: '#ffb6c1', frostedTint: 'light' },
+  crystal: { tubeGlass: 'rgba(200,255,255,0.1)', tubeBorder: '#c8ffff', frostedTint: 'light' },
+  lava: { tubeGlass: 'rgba(255,100,0,0.1)', tubeBorder: '#ff6400', frostedTint: 'dark' },
+  ocean: { tubeGlass: 'rgba(0,100,255,0.1)', tubeBorder: '#0064ff', frostedTint: 'light' },
+  forest: { tubeGlass: 'rgba(0,150,0,0.1)', tubeBorder: '#009600', frostedTint: 'dark' },
+  space: { tubeGlass: 'rgba(50,0,100,0.1)', tubeBorder: '#320064', frostedTint: 'light' },
 };
 
 export interface Settings {

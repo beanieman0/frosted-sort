@@ -11,6 +11,7 @@ import { SplashScreen } from './src/screens/SplashScreen';
 import { MainMenuScreen } from './src/screens/MainMenuScreen';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { LevelMapScreen } from './src/screens/LevelMapScreen';
+import { StoreScreen } from './src/screens/StoreScreen';
 import { canPour, isWin, generateLevel } from './src/logic/engine';
 import { getStarRating } from './src/logic/stars';
 import { getTutorialHint } from './src/logic/tutorial';
@@ -21,7 +22,7 @@ import {
   playPourSound, playTapSound, playWinSound, setSoundSystemVolume
 } from './src/utils/sounds';
 
-type AppScreen = 'splash' | 'menu' | 'game' | 'leaderboard' | 'levelmap';
+type AppScreen = 'splash' | 'menu' | 'game' | 'leaderboard' | 'levelmap' | 'store';
 
 function getLevelConfig(level: number) {
   const filledCount = Math.min(14, 3 + Math.floor((level - 1) / 45));
@@ -56,7 +57,39 @@ interface GameScreenProps {
 
 function GameScreen({ onOpenSettings, onBack, playLevelId }: GameScreenProps) {
   const { settings, colors } = useSettings();
-  const { gameState, advanceLevel, addCoins, recordStars } = useGame();
+  const { gameState, advanceLevel, addCoins, recordStars, getActiveSkin, getActiveLiquidSkin, getActiveBackgroundSkin, claimDailyReward, getDailyRewardStatus, checkAchievements } = useGame();
+  
+  // Check for daily rewards and achievements on game start
+  useEffect(() => {
+    // Claim daily reward if available
+    const dailyReward = claimDailyReward();
+    if (dailyReward) {
+      // Show a notification about the daily reward
+      // In a real app, you might show a toast or modal
+      console.log(`Daily reward claimed: ${dailyReward.coins} coins! Streak: ${dailyReward.streak}`);
+    }
+    
+    // Check for achievements
+    checkAchievements();
+  }, [claimDailyReward, checkAchievements]);
+  
+  // Get background skin colors (simplified - in a real app you'd have more sophisticated skin handling)
+  const backgroundSkin = getActiveBackgroundSkin();
+  const isDarkTheme = settings.theme === 'dark';
+  
+  // Define background colors for different skins
+  const backgroundSkins: Record<string, string> = {
+    default: isDarkTheme ? '#1a1a2e' : '#F3F4F6',
+    gradient: isDarkTheme ? '#16213e' : '#FFFFFF',
+    stars: isDarkTheme ? '#0b0d17' : '#f0f8ff',
+    aurora: isDarkTheme ? '#001428' : '#e6f3ff',
+    galaxy: isDarkTheme ? '#0a0a0a' : '#f8f4ff',
+    ocean: isDarkTheme ? '#001a33' : '#e6f3ff',
+    forest: isDarkTheme ? '#001a00' : '#e6ffe6',
+    mountain: isDarkTheme ? '#000814' : '#f0f8ff'
+  };
+  
+  const backgroundColor = backgroundSkins[backgroundSkin] || (isDarkTheme ? '#1a1a2e' : '#F3F4F6');
   
   // If playing a past level via the map, use that. Otherwise play the max unlocked level.
   const level = playLevelId ?? gameState.level;
@@ -234,9 +267,9 @@ function GameScreen({ onOpenSettings, onBack, playLevelId }: GameScreenProps) {
   const bg = colors.background;
   const isLight = settings.theme === 'light';
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
-      <StatusBar barStyle={isLight ? 'dark-content' : 'light-content'} backgroundColor={bg} />
+   return (
+     <SafeAreaView style={[styles.container, { backgroundColor: backgroundColor }]}>
+       <StatusBar barStyle={isLight ? 'dark-content' : 'light-content'} backgroundColor={backgroundColor} />
 
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerSide} onPress={onBack}>
@@ -288,17 +321,19 @@ function GameScreen({ onOpenSettings, onBack, playLevelId }: GameScreenProps) {
           return (
             <View key={index} style={styles.tubeWithButton}>
               {showHint && <TutorialArrow />}
-              <Tube
-                colors={tubeColors}
-                visibleCount={isRevealed ? 4 : levelConfig.tubeVisibilities[index]}
-                isRevealed={isRevealed}
-                isSelected={selectedIdx === index}
-                onPress={() => handleTubePress(index)}
-                accentColor={colors.accent}
-                glassColor={colors.tubeGlass}
-                borderColor={colors.tubeBorder}
-                frostedTint={colors.frostedTint}
-              />
+               <Tube
+                 colors={tubeColors}
+                 visibleCount={isRevealed ? 4 : levelConfig.tubeVisibilities[index]}
+                 isRevealed={isRevealed}
+                 isSelected={selectedIdx === index}
+                 onPress={() => handleTubePress(index)}
+                 accentColor={colors.accent}
+                 glassColor={colors.tubeGlass}
+                 borderColor={colors.tubeBorder}
+                 frostedTint={colors.frostedTint}
+                 skin={getActiveSkin()}
+                 liquidSkin={getActiveLiquidSkin(tubeColors[0] || '#FFFFFF')} // Use first color or white as fallback
+               />
               {levelConfig.tubeVisibilities[index] < 4 && !isRevealed && (
                 <TouchableOpacity
                   style={[styles.revealBtn, { borderColor: colors.accent }]}
@@ -403,46 +438,52 @@ function AppNavigator() {
     }
   }, [isLoaded, currentScreen]);
 
-  if (!isLoaded) return null;
+   if (!isLoaded) return null;
 
-  return (
-    <>
-      {currentScreen === 'splash' && (
-        <SplashScreen onDone={() => setCurrentScreen('menu')} />
-      )}
-      {currentScreen === 'menu' && (
-        <MainMenuScreen 
-          onPlay={() => { setTargetLevel(undefined); setCurrentScreen('game'); }} 
-          onOpenSettings={() => setShowSettings(true)} 
-          onLeaderboard={() => setCurrentScreen('leaderboard')}
-          onLevelMap={() => setCurrentScreen('levelmap')}
-        />
-      )}
-      {currentScreen === 'game' && (
-        <GameScreen 
-          playLevelId={targetLevel}
-          onOpenSettings={() => setShowSettings(true)} 
-          onBack={() => setCurrentScreen('menu')} 
-        />
-      )}
-      {currentScreen === 'leaderboard' && (
-        <LeaderboardScreen 
-          onBack={() => setCurrentScreen('menu')} 
-        />
-      )}
-      {currentScreen === 'levelmap' && (
-        <LevelMapScreen 
-          onBack={() => setCurrentScreen('menu')} 
-          onSelectLevel={(lvl) => {
-            setTargetLevel(lvl);
-            setCurrentScreen('game');
-          }}
-        />
-      )}
-      
-      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
-    </>
-  );
+   return (
+     <>
+       {currentScreen === 'splash' && (
+         <SplashScreen onDone={() => setCurrentScreen('menu')} />
+       )}
+       {currentScreen === 'menu' && (
+         <MainMenuScreen 
+           onPlay={() => { setTargetLevel(undefined); setCurrentScreen('game'); }} 
+           onOpenSettings={() => setShowSettings(true)} 
+           onLeaderboard={() => setCurrentScreen('leaderboard')}
+           onLevelMap={() => setCurrentScreen('levelmap')}
+           onOpenStore={() => setCurrentScreen('store')}
+         />
+       )}
+       {currentScreen === 'game' && (
+         <GameScreen 
+           playLevelId={targetLevel}
+           onOpenSettings={() => setShowSettings(true)} 
+           onBack={() => setCurrentScreen('menu')} 
+         />
+       )}
+       {currentScreen === 'leaderboard' && (
+         <LeaderboardScreen 
+           onBack={() => setCurrentScreen('menu')} 
+         />
+       )}
+       {currentScreen === 'levelmap' && (
+         <LevelMapScreen 
+           onBack={() => setCurrentScreen('menu')} 
+           onSelectLevel={(lvl) => {
+             setTargetLevel(lvl);
+             setCurrentScreen('game');
+           }}
+         />
+       )}
+       {currentScreen === 'store' && (
+         <StoreScreen 
+           onBack={() => setCurrentScreen('menu')} 
+         />
+       )}
+       
+       <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
+     </>
+   );
 }
 
 export default function App() {

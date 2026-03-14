@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Animated, Dimensions } from 'react-native';
 import { useSettings } from '../context/SettingsContext';
 import { useGame } from '../context/GameContext';
@@ -8,6 +8,7 @@ interface MainMenuScreenProps {
   onOpenSettings: () => void;
   onLeaderboard?: () => void;
   onLevelMap?: () => void;
+  onOpenStore: () => void;
 }
 
 const { width, height } = Dimensions.get('window');
@@ -64,14 +65,33 @@ function FloatingBackground() {
   );
 }
 
-export function MainMenuScreen({ onPlay, onOpenSettings, onLeaderboard, onLevelMap }: MainMenuScreenProps) {
+export function MainMenuScreen({ onPlay, onOpenSettings, onLeaderboard, onLevelMap, onOpenStore }: MainMenuScreenProps) {
   const { colors } = useSettings();
-  const { gameState } = useGame();
+  const { gameState, claimDailyReward, getDailyRewardStatus } = useGame();
+  
+  const [dailyRewardStatus, setDailyRewardStatus] = useState(() => getDailyRewardStatus());
+  const [dailyRewardAvailable, setDailyRewardAvailable] = useState(false);
+  
+  // Check daily reward status on mount and periodically
+  useEffect(() => {
+    const status = getDailyRewardStatus();
+    setDailyRewardStatus(status);
+    setDailyRewardAvailable(status.canClaim);
+    
+    // Set up interval to check for new day (every minute)
+    const interval = setInterval(() => {
+      const status = getDailyRewardStatus();
+      setDailyRewardStatus(status);
+      setDailyRewardAvailable(status.canClaim);
+    }, 60000); // Check every minute
+    
+    return () => clearInterval(interval);
+  }, [getDailyRewardStatus]);
   
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const contentTranslate = useRef(new Animated.Value(20)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-
+  
   useEffect(() => {
     Animated.parallel([
       Animated.timing(contentOpacity, {
@@ -86,7 +106,7 @@ export function MainMenuScreen({ onPlay, onOpenSettings, onLeaderboard, onLevelM
         useNativeDriver: true,
       })
     ]).start();
-
+    
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.1, duration: 800, useNativeDriver: true }),
@@ -131,23 +151,54 @@ export function MainMenuScreen({ onPlay, onOpenSettings, onLeaderboard, onLevelM
           <Text style={[styles.playBtnText, { fontSize: 16 }]}>🗺️ LEVEL MAP</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.playBtn, { shadowColor: colors.accent, marginTop: 16, backgroundColor: colors.buttonBg }]}
-          onPress={onLeaderboard}
-        >
-          <Text style={[styles.playBtnText, { fontSize: 16 }]}>🏆 LEADERBOARD</Text>
-        </TouchableOpacity>
+         <TouchableOpacity 
+           style={[styles.playBtn, { shadowColor: colors.accent, marginTop: 16, backgroundColor: colors.buttonBg }]}
+           onPress={onLeaderboard}
+         >
+           <Text style={[styles.playBtnText, { fontSize: 16 }]}>🏆 LEADERBOARD</Text>
+         </TouchableOpacity>
+
+         {/* Store button will be handled in AppNavigator - for now we'll keep the alert until we integrate it properly */}
+         <TouchableOpacity 
+           style={[styles.playBtn, { shadowColor: colors.accent, marginTop: 16, backgroundColor: colors.buttonBg }]}
+           onPress={onOpenStore}
+         >
+           <Text style={[styles.playBtnText, { fontSize: 16 }]}>🛒 STORE</Text>
+         </TouchableOpacity>
         
-        <View style={styles.statsRow}>
-          <View style={[styles.statBox, { backgroundColor: colors.surface }]}>
-            <Text style={styles.statIcon}>💰</Text>
-            <Text style={[styles.statValue, { color: colors.title }]}>{gameState.coins}</Text>
-          </View>
-          <View style={[styles.statBox, { backgroundColor: colors.surface }]}>
-            <Text style={styles.statIcon}>🔥</Text>
-            <Text style={[styles.statValue, { color: colors.title }]}>{gameState.streak}</Text>
-          </View>
-        </View>
+         <View style={styles.statsRow}>
+           <View style={[styles.statBox, { backgroundColor: colors.surface }]}>
+             <Text style={styles.statIcon}>💰</Text>
+             <Text style={[styles.statValue, { color: colors.title }]}>{gameState.coins}</Text>
+           </View>
+           <View style={[styles.statBox, { backgroundColor: colors.surface }]}>
+             <Text style={styles.statIcon}>🔥</Text>
+             <Text style={[styles.statValue, { color: colors.title }]}>{gameState.streak}</Text>
+           </View>
+           {dailyRewardAvailable && (
+             <TouchableOpacity 
+               style={[styles.statBox, { backgroundColor: '#4ECDC4' }]}
+               onPress={() => {
+                 const reward = claimDailyReward();
+                 if (reward) {
+                   setDailyRewardAvailable(false);
+                   setDailyRewardStatus(getDailyRewardStatus());
+                   // Show some feedback - in a real app you'd use a toast or modal
+                   alert(`Daily reward claimed! +${reward.coins} coins (${reward.streak} day streak)`);
+                 }
+               }}
+             >
+               <Text style={styles.statIcon}>🎁</Text>
+               <Text style={[styles.statValue, { color: '#1a1a2e', fontWeight: '700' }]}>CLAIM</Text>
+             </TouchableOpacity>
+           )}
+           {!dailyRewardAvailable && (
+             <View style={[styles.statBox, { backgroundColor: colors.surface }]}>
+               <Text style={styles.statIcon}>🎁</Text>
+               <Text style={[styles.statValue, { color: colors.title }]}>{dailyRewardStatus.streak} day streak</Text>
+             </View>
+           )}
+         </View>
       </Animated.View>
     </View>
   );
