@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { BlurView } from 'expo-blur';
 
@@ -7,6 +7,7 @@ interface TubeProps {
   isSelected: boolean;
   visibleCount?: number;
   onPress: () => void;
+  isRevealed?: boolean;
   // Theme-aware colors passed from parent
   accentColor?: string;
   glassColor?: string;
@@ -18,6 +19,7 @@ export function Tube({
   colors,
   isSelected,
   visibleCount = 2,
+  isRevealed = false,
   onPress,
   accentColor = '#4ECDC4',
   glassColor = 'rgba(255,255,255,0.06)',
@@ -32,6 +34,61 @@ export function Tube({
       useNativeDriver: true,
     }).start();
   }, [isSelected]);
+
+  const [localColors, setLocalColors] = useState<Array<string | undefined>>([
+    colors[0], colors[1], colors[2], colors[3]
+  ]);
+  const localColorsRef = useRef(localColors);
+
+  const fillAnims = useRef([
+    new Animated.Value(colors[0] ? 1 : 0),
+    new Animated.Value(colors[1] ? 1 : 0),
+    new Animated.Value(colors[2] ? 1 : 0),
+    new Animated.Value(colors[3] ? 1 : 0),
+  ]).current;
+
+  useEffect(() => {
+    const isLevelRestart = Math.abs(colors.filter(c => c).length - localColorsRef.current.filter(c => c).length) > 1;
+
+    [0, 1, 2, 3].forEach(i => {
+      const newColor = colors[i];
+      const oldColor = localColorsRef.current[i];
+
+      if (isLevelRestart || (newColor && oldColor && newColor !== oldColor)) {
+        // Instant update without animation when level changes drastically
+        const newLocal = [...localColorsRef.current];
+        newLocal[i] = newColor;
+        localColorsRef.current = newLocal;
+        setLocalColors(newLocal);
+        fillAnims[i].setValue(newColor ? 1 : 0);
+      } else if (newColor && !oldColor) {
+        // Pouring IN
+        const newLocal = [...localColorsRef.current];
+        newLocal[i] = newColor;
+        localColorsRef.current = newLocal;
+        setLocalColors(newLocal);
+        Animated.timing(fillAnims[i], {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: false
+        }).start();
+      } else if (!newColor && oldColor) {
+        // Pouring OUT
+        Animated.timing(fillAnims[i], {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: false
+        }).start(() => {
+          if (!colors[i]) {
+            const newLocal = [...localColorsRef.current];
+            newLocal[i] = undefined;
+            localColorsRef.current = newLocal;
+            setLocalColors(newLocal);
+          }
+        });
+      }
+    });
+  }, [colors, fillAnims]);
 
   const totalSlots = 4;
   const hiddenCount = Math.max(0, totalSlots - visibleCount);
@@ -49,13 +106,22 @@ export function Tube({
         >
           <View style={styles.liquidContainer}>
             {[0, 1, 2, 3].map((index) => {
-              const color = colors[index];
+              const displayColor = localColors[index];
+              const isObscured = !isRevealed && index < hiddenCount && displayColor != null;
+              const finalColor = isObscured ? 'rgba(0,0,0,0.15)' : displayColor;
+              
               return (
-                <View
+                <Animated.View
                   key={index}
                   style={[
                     styles.liquidLayer,
-                    { backgroundColor: color || 'transparent' },
+                    { 
+                      backgroundColor: finalColor || 'transparent',
+                      height: fillAnims[index].interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0%', '25%']
+                      })
+                    },
                     index === 0 && { borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
                   ]}
                 />
@@ -66,7 +132,7 @@ export function Tube({
 
         {frostedHeightPercent > 0 && (
           <View style={[styles.frostedWrapper, { height: `${frostedHeightPercent}%` }]}>
-            <BlurView intensity={90} tint={frostedTint} style={StyleSheet.absoluteFill} />
+            <BlurView intensity={100} tint={frostedTint} style={StyleSheet.absoluteFill} />
             <View style={styles.frostedHighlight} />
           </View>
         )}
@@ -101,7 +167,6 @@ const styles = StyleSheet.create({
     flexDirection: 'column-reverse',
   },
   liquidLayer: {
-    flex: 1,
     width: '100%',
   },
   frostedWrapper: {
@@ -117,6 +182,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     borderTopWidth: 1,
     borderColor: 'rgba(255,255,255,0.6)',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.4)',
   },
 });

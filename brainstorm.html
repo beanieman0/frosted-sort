@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frosted Sort – Brainstorm</title>
+<style>
+  :root {
+    --bg: #1a1a2e; --surface: #16213e; --accent: #4ECDC4;
+    --accent2: #FF6B9D; --gold: #FFE66D; --text: #E8F4FD; --muted: #6b7db3;
+    --border: rgba(78,205,196,0.25);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; padding: 24px 28px; min-height: 100vh; }
+  h1 { font-size: 1.7rem; font-weight: 900; background: linear-gradient(135deg, #4ECDC4, #FFE66D); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 4px; }
+  .subtitle { font-size: 0.88rem; color: var(--muted); margin-bottom: 32px; }
+  .section-title {
+    font-size: 0.78rem; font-weight: 800; color: var(--gold); text-transform: uppercase;
+    letter-spacing: 2.5px; margin: 36px 0 16px; padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255,230,109,0.2);
+  }
+  /* ── Splash cards ── */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface); border: 2px solid transparent; border-radius: 18px;
+    overflow: hidden; cursor: pointer; transition: all 0.2s;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: 0 8px 30px rgba(78,205,196,0.12); }
+  .card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(78,205,196,0.22); }
+  .card-preview { height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+  .card-body { padding: 16px; }
+  .card-body h3 { font-size: 0.95rem; font-weight: 800; margin-bottom: 5px; }
+  .card-body p { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+  .badge { position: absolute; top: 10px; right: 10px; background: var(--gold); color: #1a1a2e; font-size: 0.65rem; font-weight: 900; padding: 3px 8px; border-radius: 20px; }
+
+  /* Preview A */
+  .pA { background: radial-gradient(ellipse at center, #0f3460 0%, #1a1a2e 75%); }
+  .logo-text { font-size: 1.5rem; font-weight: 900; letter-spacing: 3px; background: linear-gradient(135deg,#4ECDC4,#FFE66D); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .tagline { font-size: 0.65rem; color: rgba(255,255,255,0.35); letter-spacing: 5px; margin-top: 3px; text-transform: uppercase; }
+  .tubes-row { display: flex; gap: 7px; margin-top: 14px; }
+  .tube-mini { width: 22px; height: 68px; border: 2px solid rgba(255,255,255,0.22); border-top: none; border-radius: 0 0 9px 9px; overflow: hidden; display: flex; flex-direction: column-reverse; position: relative; }
+  .tube-mini .frost { position: absolute; top: 0; left: 0; right: 0; height: 40%; background: rgba(200,230,255,0.3); border-top: 1px solid rgba(255,255,255,0.4); }
+  .load-bar { width: 110px; height: 3px; background: rgba(255,255,255,0.08); border-radius: 10px; margin-top: 18px; overflow: hidden; }
+  .load-fill { height: 100%; width: 60%; background: linear-gradient(90deg, #4ECDC4, #FFE66D); border-radius: 10px; animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }
+
+  /* Preview B */
+  .pB { background: #0f0f1e; }
+  .pB .big-icon { font-size: 2.8rem; margin-bottom: 8px; animation: float 2.5s ease-in-out infinite; }
+  .pB .wordmark { font-size: 1.3rem; font-weight: 900; color: #4ECDC4; letter-spacing: 2px; }
+  .dots { display: flex; gap: 8px; margin-top: 18px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: bounce 1s ease-in-out infinite; }
+  .dot:nth-child(2){ animation-delay: 0.18s; } .dot:nth-child(3){ animation-delay: 0.36s; }
+  @keyframes bounce { 0%,100%{opacity:0.3;transform:scale(0.6)} 50%{opacity:1;transform:scale(1)} }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+  /* Preview C */
+  .pC { background: linear-gradient(155deg, #16213e, #0f3460); flex-direction: column; }
+  .hero-tubes { display: flex; gap: 9px; align-items: flex-end; }
+  .tube-h { width: 30px; height: 88px; border: 2.5px solid rgba(255,255,255,0.25); border-top: none; border-radius: 0 0 12px 12px; overflow: hidden; display: flex; flex-direction: column-reverse; position: relative; }
+  .tube-h .frost { position: absolute; top: 0; left: 0; right: 0; height: 32%; background: rgba(200,230,255,0.3); border-top: 1px solid rgba(255,255,255,0.45); }
+  .play-btn { margin-top: 16px; background: linear-gradient(135deg, #4ECDC4, #2bb8b0); color: #1a1a2e; font-weight: 900; font-size: 0.82rem; padding: 9px 26px; border-radius: 50px; letter-spacing: 1px; box-shadow: 0 4px 18px rgba(78,205,196,0.45); }
+  .main-title { font-size: 0.95rem; font-weight: 900; letter-spacing: 2px; color: #E8F4FD; margin-bottom: 12px; }
+
+  /* ── Ideas grid ── */
+  .ideas { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+  .idea {
+    background: var(--surface); border: 1.5px solid rgba(78,205,196,0.12);
+    border-radius: 14px; padding: 15px; cursor: pointer; transition: all 0.2s;
+  }
+  .idea:hover { border-color: var(--accent2); transform: translateY(-2px); }
+  .idea.selected { border-color: var(--accent2); background: rgba(255,107,157,0.08); }
+  .idea .icon { font-size: 1.5rem; margin-bottom: 7px; }
+  .idea h4 { font-size: 0.83rem; font-weight: 800; margin-bottom: 4px; }
+  .idea p { font-size: 0.73rem; color: var(--muted); line-height: 1.45; }
+
+  /* Footer bar */
+  #bar {
+    position: fixed; bottom: 0; left: 0; right: 0; background: rgba(22,33,62,0.97);
+    backdrop-filter: blur(12px); border-top: 1px solid var(--border);
+    padding: 14px 28px; display: flex; align-items: center; gap: 12px;
+    transform: translateY(100%); transition: transform 0.3s;
+  }
+  #bar.show { transform: translateY(0); }
+  #bar span { flex: 1; font-size: 0.83rem; color: var(--muted); }
+  #bar strong { color: var(--accent); }
+  #bar em { font-style: normal; font-size: 0.78rem; color: var(--muted); }
+  .spacer { height: 80px; }
+</style>
+</head>
+<body>
+<h1>🧊 Frosted Sort – Brainstorm</h1>
+<p class="subtitle">Click cards to select your preferences, then let me know in the chat!</p>
+
+<div class="section-title">🎬 Splash / Main Screen Style — Pick One</div>
+<div class="cards">
+
+  <div class="card" data-choice="cinematic" onclick="pick(this)">
+    <div class="card-preview pA">
+      <span class="badge">⭐ Recommended</span>
+      <div class="logo-text">FROSTED SORT</div>
+      <div class="tagline">Sort · Reveal · Repeat</div>
+      <div class="tubes-row">
+        <div class="tube-mini"><div style="height:100%;width:100%;background:#FF6B9D"></div><div class="frost"></div></div>
+        <div class="tube-mini"><div style="height:75%;width:100%;background:#4ECDC4"></div><div class="frost"></div></div>
+        <div class="tube-mini"><div style="height:50%;width:100%;background:#FFE66D"></div><div class="frost"></div></div>
+      </div>
+      <div class="load-bar"><div class="load-fill"></div></div>
+    </div>
+    <div class="card-body">
+      <h3>A · Cinematic Splash</h3>
+      <p>Logo rises from frost, animated colored tubes fill up, pulsing progress bar, then fade to game. Dramatic and premium.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="minimal" onclick="pick(this)">
+    <div class="card-preview pB">
+      <div class="big-icon">🧊</div>
+      <div class="wordmark">FROSTED SORT</div>
+      <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+    </div>
+    <div class="card-body">
+      <h3>B · Minimal & Fast</h3>
+      <p>Floating snowflake icon, wordmark, animated loading dots. Quick and clean — gets into the game fast.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="mainmenu" onclick="pick(this)">
+    <div class="card-preview pC">
+      <div class="main-title">FROSTED SORT</div>
+      <div class="hero-tubes">
+        <div class="tube-h"><div style="height:100%;width:100%;background:#FF6B9D"></div><div class="frost"></div></div>
+        <div class="tube-h"><div style="height:80%;width:100%;background:#FFE66D"></div><div class="frost"></div></div>
+        <div class="tube-h"><div style="height:60%;width:100%;background:#4ECDC4"></div><div class="frost"></div></div>
+        <div class="tube-h"><div style="height:40%;width:100%;background:#A29BFE"></div></div>
+      </div>
+      <div class="play-btn">▶ PLAY</div>
+    </div>
+    <div class="card-body">
+      <h3>C · Full Main Menu</h3>
+      <p>Animated tubes in background, Play / Continue / Settings buttons. Like Candy Crush or Angry Birds — stays until user taps Play.</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="section-title">🚀 Game Improvements — Select All You Want</div>
+<div class="ideas">
+  <div class="idea" data-choice="streak" onclick="toggle(this)"><div class="icon">🔥</div><h4>Daily Win Streak</h4><p>Streak counter + daily login reward. Brings players back every day.</p></div>
+  <div class="idea" data-choice="undo" onclick="toggle(this)"><div class="icon">↩️</div><h4>Undo Move</h4><p>3 undos per level, watch ad for more. Huge quality-of-life feature.</p></div>
+  <div class="idea" data-choice="stars" onclick="toggle(this)"><div class="icon">⭐</div><h4>Star Rating</h4><p>1–3 stars based on moves used. Encourages replaying for perfection.</p></div>
+  <div class="idea" data-choice="pour-anim" onclick="toggle(this)"><div class="icon">✨</div><h4>Pour Animations</h4><p>Liquid flows visually between tubes. Satisfying ASMR + visual combo.</p></div>
+  <div class="idea" data-choice="confetti" onclick="toggle(this)"><div class="icon">🎊</div><h4>Win Confetti</h4><p>Particle burst + screen glow on level complete. Far more rewarding.</p></div>
+  <div class="idea" data-choice="coins" onclick="toggle(this)"><div class="icon">💰</div><h4>Coins & Shop</h4><p>Earn coins, spend on hints/undos/skins. Core retention loop.</p></div>
+  <div class="idea" data-choice="skins" onclick="toggle(this)"><div class="icon">🎨</div><h4>Tube Skins</h4><p>Neon, icy, pastel, golden tube styles. Unlock via coins or IAP.</p></div>
+  <div class="idea" data-choice="tutorial" onclick="toggle(this)"><div class="icon">📖</div><h4>Guided Tutorial</h4><p>Animated arrows on first 3 levels. Reduces drop-off for new players.</p></div>
+  <div class="idea" data-choice="levelmap" onclick="toggle(this)"><div class="icon">🗺️</div><h4>Level Map / Worlds</h4><p>Visual level map grouped into worlds (Arctic, Neon, Deep Ocean…).</p></div>
+  <div class="idea" data-choice="timer" onclick="toggle(this)"><div class="icon">⏱️</div><h4>Timed Mode</h4><p>Optional race-against-clock challenge for extra replayability.</p></div>
+  <div class="idea" data-choice="leaderboard" onclick="toggle(this)"><div class="icon">🏆</div><h4>Leaderboard</h4><p>Weekly leaderboard by levels. Drives competition and social sharing.</p></div>
+  <div class="idea" data-choice="haptics" onclick="toggle(this)"><div class="icon">📳</div><h4>Haptic Patterns</h4><p>Unique haptic for pour, tap, win, error. Satisfying tactile feedback.</p></div>
+</div>
+
+<div class="spacer"></div>
+<div id="bar">
+  <span>Selected: <strong id="cnt">0</strong> items</span>
+  <em>Tell me your choices in the chat ↗</em>
+</div>
+
+<script>
+const splashCards = document.querySelectorAll('.cards .card');
+const allSelected = new Set();
+
+function pick(el) {
+  splashCards.forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  ['cinematic','minimal','mainmenu'].forEach(k => allSelected.delete(k));
+  allSelected.add(el.dataset.choice);
+  updateBar();
+}
+
+function toggle(el) {
+  el.classList.toggle('selected');
+  const k = el.dataset.choice;
+  if (el.classList.contains('selected')) allSelected.add(k);
+  else allSelected.delete(k);
+  updateBar();
+}
+
+function updateBar() {
+  document.getElementById('cnt').textContent = allSelected.size;
+  document.getElementById('bar').classList.toggle('show', allSelected.size > 0);
+}
+</script>
+</body>
+</html>

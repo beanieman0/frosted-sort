@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 export type Theme = 'dark' | 'light';
+export type TubeSkin = 'default' | 'neon' | 'icy' | 'golden' | 'pastel';
 
 export interface ThemeColors {
   background: string;
@@ -33,7 +34,7 @@ const DARK_COLORS: ThemeColors = {
 };
 
 const LIGHT_COLORS: ThemeColors = {
-  background: '#F0F4FF',       // soft lavender-white
+  background: '#F3F4F6', 
   surface: '#FFFFFF',
   surfaceBorder: '#A8DADC',
   title: '#2D3561',
@@ -47,10 +48,21 @@ const LIGHT_COLORS: ThemeColors = {
   frostedTint: 'light',
 };
 
+// Skin overrides map
+const SKIN_OVERRIDES: Record<TubeSkin, Partial<ThemeColors>> = {
+  default: {},
+  neon: { tubeGlass: 'rgba(255,0,255,0.06)', tubeBorder: '#ff00ff', frostedTint: 'dark' },
+  icy: { tubeGlass: 'rgba(200,240,255,0.2)', tubeBorder: '#c8f0ff', frostedTint: 'light' },
+  golden: { tubeGlass: 'rgba(255,215,0,0.1)', tubeBorder: '#ffd700', frostedTint: 'dark' },
+  pastel: { tubeGlass: 'rgba(255,228,225,0.2)', tubeBorder: '#ffb6c1', frostedTint: 'light' },
+};
+
 export interface Settings {
   theme: Theme;
-  soundVolume: number;    // 0–1
+  soundVolume: number;    
   vibrationOn: boolean;
+  skin: TubeSkin;
+  timedModeEnabled: boolean;
 }
 
 interface SettingsContextType {
@@ -59,6 +71,8 @@ interface SettingsContextType {
   setTheme: (t: Theme) => void;
   setSoundVolume: (v: number) => void;
   setVibration: (on: boolean) => void;
+  setSkin: (skin: TubeSkin) => void;
+  setTimedModeEnabled: (on: boolean) => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
@@ -68,9 +82,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     theme: 'dark',
     soundVolume: 0.6,
     vibrationOn: true,
+    skin: 'default',
+    timedModeEnabled: false,
   });
 
-  const colors = settings.theme === 'dark' ? DARK_COLORS : LIGHT_COLORS;
+  const baseColors = settings.theme === 'dark' ? DARK_COLORS : LIGHT_COLORS;
+  
+  // Apply skin overrides
+  const skinOverrides = SKIN_OVERRIDES[settings.skin];
+  const colors = { ...baseColors, ...skinOverrides };
 
   return (
     <SettingsContext.Provider
@@ -80,6 +100,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setTheme: (theme) => setSettings(s => ({ ...s, theme })),
         setSoundVolume: (soundVolume) => setSettings(s => ({ ...s, soundVolume })),
         setVibration: (vibrationOn) => setSettings(s => ({ ...s, vibrationOn })),
+        setSkin: (skin) => setSettings(s => ({ ...s, skin })),
+        setTimedModeEnabled: (timedModeEnabled) => setSettings(s => ({ ...s, timedModeEnabled })),
       }}
     >
       {children}

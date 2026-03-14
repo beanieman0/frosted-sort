@@ -1,56 +1,162 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet, View, Text, StatusBar, SafeAreaView,
-  TouchableOpacity, Modal, Platform, Vibration
+  TouchableOpacity, Modal, Platform
 } from 'react-native';
 import { Tube } from './src/components/Tube';
 import { SettingsModal } from './src/components/SettingsModal';
 import { SettingsProvider, useSettings } from './src/context/SettingsContext';
-import { canPour, isWin, getVisibleLayers, generateLevel } from './src/logic/engine';
+import { GameProvider, useGame } from './src/context/GameContext';
+import { SplashScreen } from './src/screens/SplashScreen';
+import { MainMenuScreen } from './src/screens/MainMenuScreen';
+import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
+import { LevelMapScreen } from './src/screens/LevelMapScreen';
+import { canPour, isWin, generateLevel } from './src/logic/engine';
+import { getStarRating } from './src/logic/stars';
+import { getTutorialHint } from './src/logic/tutorial';
+import { TutorialArrow } from './src/components/TutorialArrow';
+import { ConfettiOverlay } from './src/components/ConfettiOverlay';
+import { hapticTap, hapticPour, hapticWin, hapticError } from './src/utils/feedback';
 import {
   playPourSound, playTapSound, playWinSound, setSoundSystemVolume
 } from './src/utils/sounds';
 
-const TUBES_FILLED = 4;
-const TUBES_EMPTY = 2;
-const VISIBLE_LAYERS = 2;
+type AppScreen = 'splash' | 'menu' | 'game' | 'leaderboard' | 'levelmap';
 
-// ----- Inner game component (consumes SettingsContext) -----
-function Game() {
+function getLevelConfig(level: number) {
+  const filledCount = Math.min(14, 3 + Math.floor((level - 1) / 45));
+  const emptyCount = (level % 10 === 0) ? 1 : 2; 
+  const totalTubes = filledCount + emptyCount;
+  const tubeVisibilities = new Array(totalTubes).fill(4);
+  
+  for (let i = 0; i < totalTubes; i++) {
+    let minVis = 4, maxVis = 4;
+    if (level < 10) { minVis = 3; maxVis = 4; }
+    else if (level < 50) { minVis = 2; maxVis = 3; }
+    else if (level < 150) { minVis = 1; maxVis = 3; }
+    else { minVis = 1; maxVis = 2; }
+    tubeVisibilities[i] = Math.floor(Math.random() * (maxVis - minVis + 1)) + minVis;
+  }
+  
+  const maxTimeSeconds = Math.max(30, filledCount * 15 + Math.floor(level / 5) * 5);
+  return { filledCount, emptyCount, tubeVisibilities, maxTimeSeconds };
+}
+
+const formatTime = (secs: number) => {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
+interface GameScreenProps {
+  onOpenSettings: () => void;
+  onBack: () => void;
+  playLevelId?: number;
+}
+
+function GameScreen({ onOpenSettings, onBack, playLevelId }: GameScreenProps) {
   const { settings, colors } = useSettings();
+  const { gameState, advanceLevel, addCoins, recordStars } = useGame();
+  
+  // If playing a past level via the map, use that. Otherwise play the max unlocked level.
+  const level = playLevelId ?? gameState.level;
 
-  const [tubes, setTubes] = useState<string[][]>(() => generateLevel(TUBES_FILLED, TUBES_EMPTY));
+  const [levelConfig, setLevelConfig] = useState(() => getLevelConfig(level));
+  const [tubes, setTubes] = useState<string[][]>([]);
+  
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [hasWon, setHasWon] = useState(false);
-  const [level, setLevel] = useState(1);
   const [revealedTubes, setRevealedTubes] = useState<Set<number>>(new Set());
   const [showAdFor, setShowAdFor] = useState<number | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
 
-  // Sync sound volume whenever settings change
+  const [history, setHistory] = useState<string[][][]>([]);
+  const [moveCount, setMoveCount] = useState(0);
+  const [earnedStars, setEarnedStars] = useState(0);
+  const [coinsEarned, setCoinsEarned] = useState(0);
+  const [isMultiplierApplied, setIsMultiplierApplied] = useState(false);
+
+  const [timeLeft, setTimeLeft] = useState(levelConfig.maxTimeSeconds);
+  const [isGameOver, setIsGameOver] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const initLevel = useCallback((lvl: number) => {
+    const config = getLevelConfig(lvl);
+    setLevelConfig(config);
+    setTubes(generateLevel(config.filledCount, config.emptyCount, lvl));
+    setHasWon(false);
+    setIsGameOver(false);
+    setSelectedIdx(null);
+    setRevealedTubes(new Set());
+    setHistory([]);
+    setMoveCount(0);
+    setTimeLeft(config.maxTimeSeconds);
+  }, []);
+
+  useEffect(() => {
+    initLevel(level);
+  }, [level, initLevel]);
+
+  useEffect(() => {
+    if (settings.timedModeEnabled && !hasWon && !isGameOver && tubes.length > 0) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current!);
+            setIsGameOver(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [settings.timedModeEnabled, hasWon, isGameOver, tubes.length]);
+
   useEffect(() => {
     setSoundSystemVolume(settings.soundVolume);
   }, [settings.soundVolume]);
 
-  // Check win after every move
   useEffect(() => {
-    if (isWin(tubes)) {
+    if (tubes.length === 0) return;
+    
+    if (isWin(tubes) && !hasWon) {
+      setIsGameOver(false);
       setTimeout(() => {
         if (settings.soundVolume > 0) playWinSound();
-        if (settings.vibrationOn && Platform.OS !== 'web') Vibration.vibrate([0, 100, 80, 100]);
+        if (settings.vibrationOn) hapticWin();
+        const stars = getStarRating(moveCount, levelConfig.filledCount);
+        setEarnedStars(stars);
+        
+        // Calculate coins earned
+        const timeBonus = settings.timedModeEnabled ? 15 : 0;
+        const reward = 10 + stars * 5 + timeBonus;
+        setCoinsEarned(reward);
+        setIsMultiplierApplied(false);
+        addCoins(reward); // Update header coins immediately
+        
+        // We only grant rewards and save progress if it's the current max level or we are improving a past score
+        const pastStars = gameState.starsByLevel[level] || 0;
+        if (stars > pastStars || level === gameState.level) {
+           recordStars(level, stars);
+        }
+        
         setHasWon(true);
       }, 300);
     }
-  }, [tubes]);
+  }, [tubes, hasWon, settings, moveCount, levelConfig.filledCount, level, recordStars, gameState.level, gameState.starsByLevel]);
 
   const handleTubePress = useCallback((index: number) => {
-    if (hasWon) return;
+    if (hasWon || isGameOver) return;
 
     if (selectedIdx === null) {
       if (tubes[index].length > 0) {
         if (settings.soundVolume > 0) playTapSound();
-        if (settings.vibrationOn && Platform.OS !== 'web') Vibration.vibrate(30);
+        if (settings.vibrationOn) hapticTap();
         setSelectedIdx(index);
+      } else {
+        if (settings.vibrationOn) hapticError();
       }
       return;
     }
@@ -61,23 +167,59 @@ function Game() {
 
     if (canPour(src, tgt)) {
       if (settings.soundVolume > 0) playPourSound();
-      if (settings.vibrationOn && Platform.OS !== 'web') Vibration.vibrate(20);
+      if (settings.vibrationOn) hapticPour();
+      
+      setHistory(prev => {
+        const h = [...prev, tubes.map(t => [...t])];
+        if (h.length > 3) h.shift();
+        return h;
+      });
+
       const newTubes = tubes.map(t => [...t]);
       const color = newTubes[selectedIdx].pop() as string;
       newTubes[index].push(color);
       setTubes(newTubes);
+      setMoveCount(c => c + 1);
       setSelectedIdx(null);
     } else {
+      if (settings.vibrationOn) hapticError();
       if (tgt.length > 0) { setSelectedIdx(index); } else { setSelectedIdx(null); }
     }
-  }, [hasWon, tubes, selectedIdx, settings]);
+  }, [hasWon, isGameOver, tubes, selectedIdx, settings]);
+
+  const handleUndo = () => {
+    if (history.length === 0 || hasWon || isGameOver) return;
+    const h = [...history];
+    const prevTubes = h.pop();
+    if (prevTubes) {
+      setTubes(prevTubes);
+      setHistory(h);
+      setMoveCount(c => Math.max(0, c - 1));
+      setSelectedIdx(null);
+    }
+  };
 
   const nextLevel = () => {
-    setTubes(generateLevel(TUBES_FILLED, TUBES_EMPTY));
-    setSelectedIdx(null);
-    setHasWon(false);
-    setRevealedTubes(new Set());
-    setLevel(l => l + 1);
+    // Only give big coin rewards for new level progressions
+    if (level === gameState.level) {
+      advanceLevel(); 
+    } else {
+       // Replayed a past level, return to Level Map
+       onBack();
+    }
+  };
+
+  const handleTripleCoins = () => {
+    if (isMultiplierApplied) return;
+    const bonus = coinsEarned * 2;
+    addCoins(bonus);
+    setCoinsEarned(c => c * 3);
+    setIsMultiplierApplied(true);
+    if (settings.vibrationOn) hapticWin();
+  };
+
+  const restartLevel = () => {
+    initLevel(level);
   };
 
   const handleWatchAd = () => {
@@ -88,44 +230,68 @@ function Game() {
     setShowAdFor(null);
   };
 
+  const hintIdx = level <= 3 && tubes.length > 0 ? getTutorialHint(tubes, selectedIdx) : null;
   const bg = colors.background;
   const isLight = settings.theme === 'light';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
-      <StatusBar
-        barStyle={isLight ? 'dark-content' : 'light-content'}
-        backgroundColor={bg}
-      />
+      <StatusBar barStyle={isLight ? 'dark-content' : 'light-content'} backgroundColor={bg} />
 
-      {/* ─── Header ─── */}
       <View style={styles.header}>
-        <View style={styles.headerSide} />
-        <View style={styles.headerCenter}>
-          <Text style={[styles.title, { color: colors.title }]}>Frosted Sort</Text>
-          <Text style={[styles.levelText, { color: colors.accent }]}>Level {level}</Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.settingsBtn, { backgroundColor: isLight ? '#DDE6F5' : '#16213e' }]}
-          onPress={() => setShowSettings(true)}
-        >
-          <Text style={styles.settingsIcon}>⚙️</Text>
+        <TouchableOpacity style={styles.headerSide} onPress={onBack}>
+          <Text style={{fontSize: 24, color: colors.title}}>←</Text>
         </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={[styles.title, { color: colors.title }]}>Level {level}</Text>
+          <View style={styles.statsRow}>
+             <Text style={[styles.levelText, { color: colors.accent }]}>💰 {gameState.coins}   🔥 {gameState.streak}</Text>
+          </View>
+        </View>
+        
+        <View style={styles.headerRightGroup}>
+          <TouchableOpacity
+            style={[styles.settingsBtn, { backgroundColor: isLight ? '#DDE6F5' : '#16213e', opacity: history.length > 0 ? 1 : 0.4 }]}
+            onPress={handleUndo}
+            disabled={history.length === 0}
+          >
+            <Text style={styles.settingsIcon}>↩️</Text>
+            {history.length > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{history.length}</Text></View>}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.settingsBtn, { backgroundColor: isLight ? '#DDE6F5' : '#16213e' }]}
+            onPress={onOpenSettings}
+          >
+            <Text style={styles.settingsIcon}>⚙️</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <Text style={[styles.subtitle, { color: colors.subtitle }]}>
-        Sort the colors. Reveal what's hidden.
-      </Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 16, gap: 16 }}>
+        <Text style={[styles.subtitle, { color: colors.subtitle, marginBottom: 0 }]}>
+          Moves: {moveCount}
+        </Text>
+        {settings.timedModeEnabled && (
+          <View style={{ backgroundColor: timeLeft < 10 ? '#FF6B6B' : 'transparent', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
+            <Text style={[styles.subtitle, { color: timeLeft < 10 ? '#fff' : colors.accent, marginBottom: 0, fontWeight: '800' }]}>
+              ⏱️ {formatTime(timeLeft)}
+            </Text>
+          </View>
+        )}
+      </View>
 
-      {/* ─── Game Board ─── */}
       <View style={styles.gameBoard}>
         {tubes.map((tubeColors, index) => {
           const isRevealed = revealedTubes.has(index);
+          const showHint = hintIdx === index;
           return (
             <View key={index} style={styles.tubeWithButton}>
+              {showHint && <TutorialArrow />}
               <Tube
                 colors={tubeColors}
-                visibleCount={isRevealed ? 4 : VISIBLE_LAYERS}
+                visibleCount={isRevealed ? 4 : levelConfig.tubeVisibilities[index]}
+                isRevealed={isRevealed}
                 isSelected={selectedIdx === index}
                 onPress={() => handleTubePress(index)}
                 accentColor={colors.accent}
@@ -133,7 +299,7 @@ function Game() {
                 borderColor={colors.tubeBorder}
                 frostedTint={colors.frostedTint}
               />
-              {tubeColors.length > VISIBLE_LAYERS && !isRevealed && (
+              {levelConfig.tubeVisibilities[index] < 4 && !isRevealed && (
                 <TouchableOpacity
                   style={[styles.revealBtn, { borderColor: colors.accent }]}
                   onPress={() => setShowAdFor(index)}
@@ -146,27 +312,62 @@ function Game() {
         })}
       </View>
 
-      {/* ─── Settings Modal ─── */}
-      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
+      <ConfettiOverlay visible={hasWon} />
 
-      {/* ─── Win Modal ─── */}
       <Modal visible={hasWon} transparent animationType="fade">
         <View style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}>
           <View style={[styles.winCard, { backgroundColor: colors.surface, borderColor: colors.accent }]}>
             <Text style={styles.winEmoji}>🎉</Text>
             <Text style={[styles.winTitle, { color: colors.title }]}>Sorted!</Text>
-            <Text style={[styles.winSub, { color: colors.subtitle }]}>Level {level} complete</Text>
-            <TouchableOpacity
-              style={[styles.nextBtn, { backgroundColor: colors.buttonBg }]}
-              onPress={nextLevel}
-            >
-              <Text style={[styles.nextBtnText, { color: colors.buttonText }]}>Next Level →</Text>
+            
+            <View style={styles.starsRow}>
+              {[...Array(3)].map((_, i) => (
+                <Text key={i} style={[styles.star, { opacity: i < earnedStars ? 1 : 0.2 }]}>⭐</Text>
+              ))}
+            </View>
+            
+            <Text style={[styles.winSub, { color: colors.subtitle }]}>
+              Level {level} complete in {moveCount} moves
+            </Text>
+
+            <View style={[styles.rewardBox, { backgroundColor: colors.background, borderColor: colors.accent }]}>
+              <Text style={[styles.rewardLabel, { color: colors.subtitle }]}>REWARD</Text>
+              <Text style={[styles.rewardVal, { color: colors.accent }]}>💰 +{coinsEarned}</Text>
+            </View>
+
+            {!isMultiplierApplied && (
+              <TouchableOpacity style={styles.tripleBtn} onPress={handleTripleCoins}>
+                <Text style={styles.tripleBtnText}>📺 Watch Ad to 3x</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={[styles.nextBtn, { backgroundColor: colors.buttonBg, marginTop: 12 }]} onPress={nextLevel}>
+              <Text style={[styles.nextBtnText, { color: colors.buttonText }]}>
+                {level === gameState.level ? 'Next Level →' : 'Back to Map'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* ─── Reveal-Ad Modal ─── */}
+      <Modal visible={isGameOver} transparent animationType="slide">
+        <View style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}>
+          <View style={[styles.winCard, { backgroundColor: colors.surface, borderColor: '#FF6B6B' }]}>
+            <Text style={styles.winEmoji}>⏳</Text>
+            <Text style={[styles.winTitle, { color: colors.title }]}>Time's Up!</Text>
+            <Text style={[styles.winSub, { color: colors.subtitle }]}>You ran out of time.</Text>
+            
+            <TouchableOpacity style={[styles.nextBtn, { backgroundColor: '#FF6B6B' }]} onPress={restartLevel}>
+              <Text style={[styles.nextBtnText, { color: '#fff' }]}>Retry Level</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={{ marginTop: 16 }} onPress={onBack}>
+              <Text style={{ color: colors.subtitle, fontWeight: '600' }}>Back to Menu</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showAdFor !== null} transparent animationType="slide">
         <View style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}>
           <View style={[styles.adCard, { backgroundColor: colors.surface, borderColor: '#FFE66D' }]}>
@@ -190,11 +391,66 @@ function Game() {
   );
 }
 
-// ----- Root with Provider -----
+function AppNavigator() {
+  const [currentScreen, setCurrentScreen] = useState<AppScreen>('splash');
+  const [showSettings, setShowSettings] = useState(false);
+  const [targetLevel, setTargetLevel] = useState<number | undefined>(undefined);
+  const { isLoaded, updateStreak } = useGame();
+
+  useEffect(() => {
+    if (isLoaded && currentScreen === 'menu') {
+      updateStreak();
+    }
+  }, [isLoaded, currentScreen]);
+
+  if (!isLoaded) return null;
+
+  return (
+    <>
+      {currentScreen === 'splash' && (
+        <SplashScreen onDone={() => setCurrentScreen('menu')} />
+      )}
+      {currentScreen === 'menu' && (
+        <MainMenuScreen 
+          onPlay={() => { setTargetLevel(undefined); setCurrentScreen('game'); }} 
+          onOpenSettings={() => setShowSettings(true)} 
+          onLeaderboard={() => setCurrentScreen('leaderboard')}
+          onLevelMap={() => setCurrentScreen('levelmap')}
+        />
+      )}
+      {currentScreen === 'game' && (
+        <GameScreen 
+          playLevelId={targetLevel}
+          onOpenSettings={() => setShowSettings(true)} 
+          onBack={() => setCurrentScreen('menu')} 
+        />
+      )}
+      {currentScreen === 'leaderboard' && (
+        <LeaderboardScreen 
+          onBack={() => setCurrentScreen('menu')} 
+        />
+      )}
+      {currentScreen === 'levelmap' && (
+        <LevelMapScreen 
+          onBack={() => setCurrentScreen('menu')} 
+          onSelectLevel={(lvl) => {
+            setTargetLevel(lvl);
+            setCurrentScreen('game');
+          }}
+        />
+      )}
+      
+      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
+    </>
+  );
+}
+
 export default function App() {
   return (
     <SettingsProvider>
-      <Game />
+      <GameProvider>
+        <AppNavigator />
+      </GameProvider>
     </SettingsProvider>
   );
 }
@@ -208,29 +464,34 @@ const styles = StyleSheet.create({
     paddingTop: 36,
     paddingBottom: 4,
   },
-  headerSide: { width: 44 },
+  headerSide: { width: 44, justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
-  title: { fontSize: 30, fontWeight: '800', letterSpacing: 1.5 },
-  levelText: { fontSize: 13, fontWeight: '600', letterSpacing: 3, marginTop: 2, textTransform: 'uppercase' },
+  headerRightGroup: { flexDirection: 'row', gap: 8 },
+  title: { fontSize: 28, fontWeight: '800', letterSpacing: 1.5 },
+  statsRow: { flexDirection: 'row', marginTop: 4, alignItems: 'center' },
+  levelText: { fontSize: 13, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
   settingsBtn: {
     width: 44, height: 44, borderRadius: 22,
     justifyContent: 'center', alignItems: 'center',
   },
   settingsIcon: { fontSize: 22 },
+  badge: {
+    position: 'absolute', top: -5, right: -5,
+    backgroundColor: '#FF6B9D', borderRadius: 10, paddingHorizontal: 5, paddingVertical: 2
+  },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
   subtitle: { textAlign: 'center', fontSize: 13, marginBottom: 16 },
   gameBoard: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flex: 1, flexDirection: 'row', flexWrap: 'wrap',
+    justifyContent: 'center', alignItems: 'center',
     paddingHorizontal: 12,
   },
   tubeWithButton: { alignItems: 'center', marginHorizontal: 4 },
   revealBtn: {
-    marginTop: 8, paddingHorizontal: 10, paddingVertical: 5,
-    backgroundColor: 'transparent',
-    borderRadius: 12, borderWidth: 1,
+    position: 'absolute', bottom: -35,
+    paddingHorizontal: 10, paddingVertical: 5,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12, borderWidth: 1, zIndex: 10,
   },
   revealBtnText: { fontSize: 11, fontWeight: '600' },
   overlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -240,9 +501,23 @@ const styles = StyleSheet.create({
   },
   winEmoji: { fontSize: 52, marginBottom: 12 },
   winTitle: { fontSize: 28, fontWeight: '800' },
+  starsRow: { flexDirection: 'row', gap: 8, marginVertical: 12 },
+  star: { fontSize: 32 },
   winSub: { fontSize: 16, marginTop: 4, marginBottom: 24 },
   nextBtn: { paddingHorizontal: 32, paddingVertical: 14, borderRadius: 16 },
   nextBtnText: { fontWeight: '800', fontSize: 16 },
+  rewardBox: {
+    paddingHorizontal: 20, paddingVertical: 10,
+    borderRadius: 16, borderStyle: 'dashed', borderWidth: 1,
+    alignItems: 'center', marginBottom: 12, width: '100%'
+  },
+  rewardLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  rewardVal: { fontSize: 24, fontWeight: '900' },
+  tripleBtn: {
+    backgroundColor: '#FFD700', paddingHorizontal: 20, paddingVertical: 10,
+    borderRadius: 12, marginBottom: 8, width: '100%', alignItems: 'center'
+  },
+  tripleBtnText: { color: '#000', fontWeight: '800', fontSize: 14 },
   adCard: {
     borderRadius: 24, padding: 24, alignItems: 'center',
     width: '85%', borderWidth: 1,

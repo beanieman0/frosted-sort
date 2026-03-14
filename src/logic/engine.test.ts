@@ -83,12 +83,12 @@ describe('Game Engine: isWin', () => {
     expect(isWin(partialTubes)).toBe(false);
   });
 
-  it('detects win when all filled tubes have only one color (partially filled ok)', () => {
+  it('detects no win when all filled tubes have only one color but are partially filled', () => {
     const partialWin = [
       ['red', 'red'],
       ['blue', 'blue', 'blue', 'blue'],
       [],
     ];
-    expect(isWin(partialWin)).toBe(true);
+    expect(isWin(partialWin)).toBe(false);
   });
 });
