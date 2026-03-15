@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet, View, Text, StatusBar, SafeAreaView,
-  TouchableOpacity, Modal, Platform
+  TouchableOpacity, Modal, Platform, Dimensions
 } from 'react-native';
 import { Tube } from './src/components/Tube';
 import { SettingsModal } from './src/components/SettingsModal';
@@ -314,38 +314,18 @@ function GameScreen({ onOpenSettings, onBack, playLevelId }: GameScreenProps) {
         )}
       </View>
 
-      <View style={styles.gameBoard}>
-        {tubes.map((tubeColors, index) => {
-          const isRevealed = revealedTubes.has(index);
-          const showHint = hintIdx === index;
-          return (
-            <View key={index} style={styles.tubeWithButton}>
-              {showHint && <TutorialArrow />}
-               <Tube
-                 colors={tubeColors}
-                 visibleCount={isRevealed ? 4 : levelConfig.tubeVisibilities[index]}
-                 isRevealed={isRevealed}
-                 isSelected={selectedIdx === index}
-                 onPress={() => handleTubePress(index)}
-                 accentColor={colors.accent}
-                 glassColor={colors.tubeGlass}
-                 borderColor={colors.tubeBorder}
-                 frostedTint={colors.frostedTint}
-                 skin={getActiveSkin()}
-                 liquidSkin={getActiveLiquidSkin(tubeColors[0] || '#FFFFFF')} // Use first color or white as fallback
-               />
-              {levelConfig.tubeVisibilities[index] < 4 && !isRevealed && (
-                <TouchableOpacity
-                  style={[styles.revealBtn, { borderColor: colors.accent }]}
-                  onPress={() => setShowAdFor(index)}
-                >
-                  <Text style={[styles.revealBtnText, { color: colors.accent }]}>👁 Reveal</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          );
-        })}
-      </View>
+      <TubeGrid
+        tubes={tubes}
+        levelConfig={levelConfig}
+        revealedTubes={revealedTubes}
+        selectedIdx={selectedIdx}
+        hintIdx={hintIdx}
+        colors={colors}
+        getActiveSkin={getActiveSkin}
+        getActiveLiquidSkin={getActiveLiquidSkin}
+        handleTubePress={handleTubePress}
+        setShowAdFor={setShowAdFor}
+      />
 
       <ConfettiOverlay visible={hasWon} />
 
@@ -496,6 +476,110 @@ export default function App() {
   );
 }
 
+// ── Responsive tube grid ─────────────────────────────────────────────────────
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const H_PADDING = 16; // total horizontal padding on the board
+const TUBE_H_MARGIN = 6; // margin on each side of a tube
+const REVEAL_BTN_HEIGHT = 30; // height reserved below each tube for the reveal button
+
+function computeTubeSize(totalTubes: number) {
+  // Try to fit all in one row first, then two rows
+  const rows = totalTubes <= 8 ? 1 : 2;
+  const cols = Math.ceil(totalTubes / rows);
+  const availableWidth = SCREEN_WIDTH - H_PADDING * 2;
+  const tubeWidth = Math.floor(availableWidth / cols) - TUBE_H_MARGIN * 2;
+  // clamp between 44 and 72
+  const w = Math.max(44, Math.min(72, tubeWidth));
+  // keep aspect roughly 1:3
+  const h = Math.round(w * 3);
+  return { tubeWidth: w, tubeHeight: h, cols };
+}
+
+interface TubeGridProps {
+  tubes: string[][];
+  levelConfig: ReturnType<typeof getLevelConfig>;
+  revealedTubes: Set<number>;
+  selectedIdx: number | null;
+  hintIdx: number | null;
+  colors: any;
+  getActiveSkin: () => any;
+  getActiveLiquidSkin: (color: string) => string;
+  handleTubePress: (index: number) => void;
+  setShowAdFor: (index: number) => void;
+}
+
+function TubeGrid({
+  tubes, levelConfig, revealedTubes, selectedIdx, hintIdx,
+  colors, getActiveSkin, getActiveLiquidSkin, handleTubePress, setShowAdFor,
+}: TubeGridProps) {
+  const { tubeWidth, tubeHeight } = computeTubeSize(tubes.length);
+  const hasRevealButton = levelConfig.tubeVisibilities.some(v => v < 4);
+
+  return (
+    <View style={{
+      flex: 1,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      alignContent: 'center',
+      paddingHorizontal: H_PADDING,
+      rowGap: hasRevealButton ? 40 : 16,
+      columnGap: 0,
+    }}>
+      {tubes.map((tubeColors, index) => {
+        const isRevealed = revealedTubes.has(index);
+        const showHint = hintIdx === index;
+        const showReveal = levelConfig.tubeVisibilities[index] < 4 && !isRevealed;
+        return (
+          <View
+            key={index}
+            style={{
+              alignItems: 'center',
+              marginHorizontal: TUBE_H_MARGIN,
+              // Reserve space below for reveal button so it never overlaps
+              paddingBottom: showReveal ? REVEAL_BTN_HEIGHT + 4 : 0,
+            }}
+          >
+            {showHint && <TutorialArrow />}
+            <Tube
+              colors={tubeColors}
+              visibleCount={isRevealed ? 4 : levelConfig.tubeVisibilities[index]}
+              isRevealed={isRevealed}
+              isSelected={selectedIdx === index}
+              onPress={() => handleTubePress(index)}
+              accentColor={colors.accent}
+              glassColor={colors.tubeGlass}
+              borderColor={colors.tubeBorder}
+              frostedTint={colors.frostedTint}
+              skin={getActiveSkin()}
+              liquidSkin={getActiveLiquidSkin(tubeColors[0] || '#FFFFFF')}
+              tubeWidth={tubeWidth}
+              tubeHeight={tubeHeight}
+            />
+            {showReveal && (
+              <TouchableOpacity
+                style={[tubeBtnStyle, { borderColor: colors.accent, marginTop: 6 }]}
+                onPress={() => setShowAdFor(index)}
+              >
+                <Text style={[tubeBtnTextStyle, { color: colors.accent }]}>👁 Reveal</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const tubeBtnStyle = {
+  paddingHorizontal: 10, paddingVertical: 4,
+  backgroundColor: 'rgba(0,0,0,0.6)',
+  borderRadius: 12, borderWidth: 1,
+};
+const tubeBtnTextStyle = { fontSize: 11, fontWeight: '600' as const };
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
@@ -522,19 +606,6 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
   subtitle: { textAlign: 'center', fontSize: 13, marginBottom: 16 },
-  gameBoard: {
-    flex: 1, flexDirection: 'row', flexWrap: 'wrap',
-    justifyContent: 'center', alignItems: 'center',
-    paddingHorizontal: 12,
-  },
-  tubeWithButton: { alignItems: 'center', marginHorizontal: 4 },
-  revealBtn: {
-    position: 'absolute', bottom: -35,
-    paddingHorizontal: 10, paddingVertical: 5,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12, borderWidth: 1, zIndex: 10,
-  },
-  revealBtnText: { fontSize: 11, fontWeight: '600' },
   overlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   winCard: {
     borderRadius: 24, padding: 36, alignItems: 'center',

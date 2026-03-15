@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, FlatList, Image, Modal, ActivityIndicator, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, Modal, ActivityIndicator, Dimensions, SafeAreaView } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSettings } from '../context/SettingsContext';
 import { useGame } from '../context/GameContext';
@@ -140,8 +140,13 @@ export function StoreScreen({ onBack }: StoreScreenProps) {
     }
   };
   
+  const SCREEN_W = Dimensions.get('window').width;
+  const CARD_GAP = 12;
+  const CARD_H_PADDING = 16; // left + right padding of itemsContainer
+  const CARD_WIDTH = (SCREEN_W - CARD_H_PADDING * 2 - CARD_GAP) / 2;
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backButtonText}>←</Text>
@@ -190,12 +195,11 @@ export function StoreScreen({ onBack }: StoreScreenProps) {
             } else if (selectedTab === 'background') {
               selected = gameState.backgroundSkins[gameState.backgroundSkins.length - 1] === item.id;
             } else if (selectedTab === 'liquid') {
-              // Consider selected if any color uses it
               selected = Object.values(gameState.liquidSkins).includes(item.id);
             }
             
             return (
-              <View style={[styles.itemCard, owned && styles.ownedItem, selected && styles.selectedItem]}>
+              <View style={[styles.itemCard, { width: CARD_WIDTH }, owned && styles.ownedItem, selected && styles.selectedItem]}>
                 <BlurView intensity={20} tint="dark" style={styles.glassEffect}>
                   <View style={styles.itemContent}>
                     <View style={styles.itemPreview}>
@@ -216,7 +220,7 @@ export function StoreScreen({ onBack }: StoreScreenProps) {
                         </View>
                       )}
                       {selectedTab === 'background' && (
-                        <View style={styles.backgroundPreview}>
+                        <View style={[styles.backgroundPreview, { backgroundColor: item.previewColor }]}>
                           <Text style={styles.backgroundPreviewText}>🌄</Text>
                         </View>
                       )}
@@ -256,11 +260,11 @@ export function StoreScreen({ onBack }: StoreScreenProps) {
             );
           }}
           numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
+          columnWrapperStyle={[styles.columnWrapper, { gap: CARD_GAP }]}
           contentContainerStyle={styles.flatListContent}
         />
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -273,10 +277,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 40,
-    paddingBottom: 20,
+    paddingTop: 12, // SafeAreaView handles top inset
+    paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#rgba(255,255,255,0.1)',
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   backButton: {
     width: 44,
@@ -327,18 +331,20 @@ const styles = StyleSheet.create({
   },
   itemsContainer: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
   flatListContent: {
-    paddingBottom: 80,
+    paddingBottom: 32,
+    paddingTop: 8,
   },
   itemCard: {
     borderRadius: 16,
-    marginBottom: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
     overflow: 'hidden',
-    width: (Dimensions.get('window').width - 48) / 2,
+    // width set dynamically via CARD_WIDTH inline
   },
   glassEffect: {
     padding: 16,
@@ -349,8 +355,7 @@ const styles = StyleSheet.create({
   },
   columnWrapper: {
     justifyContent: 'space-between',
-    gap: 16,
-    paddingHorizontal: 4,
+    // gap is set inline dynamically
   },
   ownedItem: {
     borderColor: '#4ECDC4',

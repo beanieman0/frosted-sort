@@ -17,7 +17,9 @@ export interface TubeProps {
   skin?: 'default' | 'neon' | 'icy' | 'golden' | 'pastel' | 'crystal' | 'lava' | 'ocean' | 'forest' | 'space';
   // Liquid skin to apply to the liquid colors
   liquidSkin?: string;
-  // Background skin for overall screen (handled at screen level)
+  // Responsive sizing from parent
+  tubeWidth?: number;
+  tubeHeight?: number;
 }
 
 // Skin-specific overrides for tube appearance
@@ -79,7 +81,9 @@ export function Tube({
   borderColor = 'rgba(255,255,255,0.3)',
   frostedTint = 'dark',
   skin = 'default',
-  liquidSkin = 'standard', // Default liquid skin
+  liquidSkin = 'standard',
+  tubeWidth,
+  tubeHeight,
 }: TubeProps) {
   // Apply skin overrides
   const skinOverrides = TUBE_SKIN_OVERRIDES[skin] || {};
@@ -159,9 +163,13 @@ export function Tube({
   const hiddenCount = Math.max(0, totalSlots - visibleCount);
   const frostedHeightPercent = (hiddenCount / totalSlots) * 100;
 
+  const sizeOverride = tubeWidth && tubeHeight
+    ? { width: tubeWidth, height: tubeHeight }
+    : {};
+
   return (
     <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
-      <Animated.View style={[styles.tubeContainer, { transform: [{ translateY }] }]}>
+      <Animated.View style={[styles.tubeContainer, sizeOverride, { transform: [{ translateY }] }]}>
         <View
           style={[
             styles.glassOutline,
@@ -208,9 +216,9 @@ export function Tube({
 
 const styles = StyleSheet.create({
   tubeContainer: {
-    width: 58,
-    height: 180,
-    marginHorizontal: 6,
+    width: 58,   // default; overridden by tubeWidth/tubeHeight props
+    height: 180, // default; overridden by tubeWidth/tubeHeight props
+    marginHorizontal: 0, // margin controlled by parent TubeGrid
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
