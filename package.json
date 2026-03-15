@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "test": "jest",
     "predeploy": "npx expo export --platform web && echo. > dist/.nojekyll",
-    "deploy": "gh-pages -d dist"
+    "deploy": "gh-pages -d dist",
+    "eas-build-pre-install": "npm config set legacy-peer-deps true"
   },
   "dependencies": {
     "@expo/metro-runtime": "^55.0.6",
