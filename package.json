@@ -2,7 +2,7 @@
   "name": "frosted-sort",
   "version": "1.0.0",
   "main": "index.ts",
-  "homepage": "https://beanieman0.github.io/frosted-sort",
+  "homepage": "https://frosted-sort.vercel.app",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
