@@ -27,6 +27,9 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "baseUrl": "/frosted-sort"
+    },
+    "experiments": {
+      "baseUrl": "/frosted-sort"
     }
   }
 }
