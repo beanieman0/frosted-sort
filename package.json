@@ -9,7 +9,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest",
-    "predeploy": "npx expo export --platform web && node -e \"const fs=require('fs'); let c=fs.readFileSync('dist/index.html','utf8'); c=c.replace(/src=\\\"\\//g, 'src=\\\"/frosted-sort/').replace(/href=\\\"\\//g, 'href=\\\"/frosted-sort/'); fs.writeFileSync('dist/index.html',c);\" && echo. > dist/.nojekyll",
+    "predeploy": "npx expo export --platform web && echo. > dist/.nojekyll",
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
