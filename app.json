@@ -25,11 +25,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png",
-      "baseUrl": "/frosted-sort"
-    },
-    "experiments": {
-      "baseUrl": "/frosted-sort"
+      "favicon": "./assets/favicon.png"
     }
   }
 }
