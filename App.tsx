@@ -24,19 +24,22 @@ import {
 
 type AppScreen = 'splash' | 'menu' | 'game' | 'leaderboard' | 'levelmap' | 'store';
 
-function getLevelConfig(level: number) {
+function getLevelConfig(level: number, difficulty: 'easy' | 'hard' = 'easy') {
   const filledCount = Math.min(14, 3 + Math.floor((level - 1) / 45));
   const emptyCount = (level % 10 === 0) ? 1 : 2; 
   const totalTubes = filledCount + emptyCount;
   const tubeVisibilities = new Array(totalTubes).fill(4);
   
-  for (let i = 0; i < totalTubes; i++) {
-    let minVis = 4, maxVis = 4;
-    if (level < 10) { minVis = 3; maxVis = 4; }
-    else if (level < 50) { minVis = 2; maxVis = 3; }
-    else if (level < 150) { minVis = 1; maxVis = 3; }
-    else { minVis = 1; maxVis = 2; }
-    tubeVisibilities[i] = Math.floor(Math.random() * (maxVis - minVis + 1)) + minVis;
+  // Hidden layers only apply in hard mode
+  if (difficulty === 'hard') {
+    for (let i = 0; i < totalTubes; i++) {
+      let minVis = 4, maxVis = 4;
+      if (level < 10) { minVis = 3; maxVis = 4; }
+      else if (level < 50) { minVis = 2; maxVis = 3; }
+      else if (level < 150) { minVis = 1; maxVis = 3; }
+      else { minVis = 1; maxVis = 2; }
+      tubeVisibilities[i] = Math.floor(Math.random() * (maxVis - minVis + 1)) + minVis;
+    }
   }
   
   const maxTimeSeconds = Math.max(30, filledCount * 15 + Math.floor(level / 5) * 5);
@@ -57,6 +60,7 @@ interface GameScreenProps {
 
 function GameScreen({ onOpenSettings, onBack, playLevelId }: GameScreenProps) {
   const { settings, colors } = useSettings();
+  const difficulty = settings.difficulty;
   const { gameState, advanceLevel, addCoins, recordStars, getActiveSkin, getActiveLiquidSkin, getActiveBackgroundSkin, claimDailyReward, getDailyRewardStatus, checkAchievements } = useGame();
   
   // Check for daily rewards and achievements on game start
@@ -94,7 +98,7 @@ function GameScreen({ onOpenSettings, onBack, playLevelId }: GameScreenProps) {
   // If playing a past level via the map, use that. Otherwise play the max unlocked level.
   const level = playLevelId ?? gameState.level;
 
-  const [levelConfig, setLevelConfig] = useState(() => getLevelConfig(level));
+  const [levelConfig, setLevelConfig] = useState(() => getLevelConfig(level, difficulty));
   const [tubes, setTubes] = useState<string[][]>([]);
   
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
@@ -113,7 +117,7 @@ function GameScreen({ onOpenSettings, onBack, playLevelId }: GameScreenProps) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const initLevel = useCallback((lvl: number) => {
-    const config = getLevelConfig(lvl);
+    const config = getLevelConfig(lvl, difficulty);
     setLevelConfig(config);
     setTubes(generateLevel(config.filledCount, config.emptyCount, lvl));
     setHasWon(false);
@@ -123,7 +127,7 @@ function GameScreen({ onOpenSettings, onBack, playLevelId }: GameScreenProps) {
     setHistory([]);
     setMoveCount(0);
     setTimeLeft(config.maxTimeSeconds);
-  }, []);
+  }, [difficulty]);
 
   useEffect(() => {
     initLevel(level);
@@ -321,6 +325,7 @@ function GameScreen({ onOpenSettings, onBack, playLevelId }: GameScreenProps) {
         selectedIdx={selectedIdx}
         hintIdx={hintIdx}
         colors={colors}
+        difficulty={difficulty}
         getActiveSkin={getActiveSkin}
         getActiveLiquidSkin={getActiveLiquidSkin}
         handleTubePress={handleTubePress}
@@ -502,6 +507,7 @@ interface TubeGridProps {
   selectedIdx: number | null;
   hintIdx: number | null;
   colors: any;
+  difficulty: 'easy' | 'hard';
   getActiveSkin: () => any;
   getActiveLiquidSkin: (color: string) => string;
   handleTubePress: (index: number) => void;
@@ -510,10 +516,10 @@ interface TubeGridProps {
 
 function TubeGrid({
   tubes, levelConfig, revealedTubes, selectedIdx, hintIdx,
-  colors, getActiveSkin, getActiveLiquidSkin, handleTubePress, setShowAdFor,
+  colors, difficulty, getActiveSkin, getActiveLiquidSkin, handleTubePress, setShowAdFor,
 }: TubeGridProps) {
   const { tubeWidth, tubeHeight } = computeTubeSize(tubes.length);
-  const hasRevealButton = levelConfig.tubeVisibilities.some(v => v < 4);
+  const hasRevealButton = difficulty === 'hard' && levelConfig.tubeVisibilities.some(v => v < 4);
 
   return (
     <View style={{
@@ -529,7 +535,8 @@ function TubeGrid({
       {tubes.map((tubeColors, index) => {
         const isRevealed = revealedTubes.has(index);
         const showHint = hintIdx === index;
-        const showReveal = levelConfig.tubeVisibilities[index] < 4 && !isRevealed;
+        // Reveal button only shown in hard mode
+        const showReveal = difficulty === 'hard' && levelConfig.tubeVisibilities[index] < 4 && !isRevealed;
         return (
           <View
             key={index}

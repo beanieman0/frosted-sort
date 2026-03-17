@@ -36,7 +36,7 @@ export function generateLevel(filledCount: number, emptyCount: number, level: nu
   let bestTubes: string[][] | null = null;
   let minMatched = Infinity;
 
-  const MAX_RETRIES = 20;
+  const MAX_RETRIES = 50;
   for (let retry = 0; retry < MAX_RETRIES; retry++) {
     // 1. Start with a solved state
     const tubes: string[][] = selectedColors.map(color => [color, color, color, color]);
@@ -44,26 +44,26 @@ export function generateLevel(filledCount: number, emptyCount: number, level: nu
       tubes.push([]);
     }
 
-    // 2. Perform N valid random "un-pours" (backward moves)
-    // Increase scrambling depth as the player gets to higher levels for a deeply fractured setup
-    const baseIterations = 50 * filledCount;
-    const levelMultiplier = Math.min(5, 1 + (level / 20)); // Scales up to 5x more scrambling by level 80
+    // 2. Scramble using only VALID pours (enforcing canPour) so every resulting
+    //    state is reachable from the solved state — guaranteeing solvability.
+    const baseIterations = 80 * filledCount;
+    const levelMultiplier = Math.min(5, 1 + (level / 20));
     const iterations = Math.floor(baseIterations * levelMultiplier);
 
     for (let i = 0; i < iterations; i++) {
-      const sourceIdx = Math.floor(Math.random() * tubes.length);
-      const targetIdx = Math.floor(Math.random() * tubes.length);
-
-      if (sourceIdx === targetIdx) continue;
-
-      // We can only un-pour if we can pour!
-      // By following the same canPour rules, we scramble the board ensuring
-      // it remains perfectly solvable. The high iteration count mixes it deeply.
-      if (tubes[sourceIdx].length > 0 && tubes[targetIdx].length < 4) {
-        // To prevent trivial 1-step shuffles, ensure we don't just reverse the exact same move immediately
-        const color = tubes[sourceIdx].pop() as string;
-        tubes[targetIdx].push(color);
+      // Collect all moves that are legal under canPour
+      const validMoves: [number, number][] = [];
+      for (let s = 0; s < tubes.length; s++) {
+        for (let t = 0; t < tubes.length; t++) {
+          if (s !== t && canPour(tubes[s], tubes[t])) {
+            validMoves.push([s, t]);
+          }
+        }
       }
+      if (validMoves.length === 0) break;
+      // Pick a random valid move and apply it
+      const [s, t] = validMoves[Math.floor(Math.random() * validMoves.length)];
+      tubes[t].push(tubes[s].pop() as string);
     }
 
     // Check win and matched count
@@ -83,8 +83,8 @@ export function generateLevel(filledCount: number, emptyCount: number, level: nu
     }
   }
 
-  // If we couldn't find a perfect mix in MAX_RETRIES, return the best found
-  return bestTubes || selectedColors.map(color => [color, color, color, color]).concat(Array(emptyCount).fill([]));
+  // Fall back to best found attempt
+  return bestTubes ?? selectedColors.map(color => [color, color, color, color]).concat(Array(emptyCount).fill([]));
 }
 
 /**

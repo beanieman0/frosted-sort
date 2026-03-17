@@ -10,8 +10,9 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ visible, onClose }: SettingsModalProps) {
-  const { settings, colors, setTheme, setSoundVolume, setVibration, setSkin, setTimedModeEnabled } = useSettings();
+  const { settings, colors, setTheme, setSoundVolume, setVibration, setSkin, setTimedModeEnabled, setDifficulty } = useSettings();
   const isLight = settings.theme === 'light';
+  const isHard = settings.difficulty === 'hard';
 
   const volumeSteps = [0, 0.25, 0.5, 0.75, 1.0];
   const currentStep = volumeSteps.reduce((prev, curr) =>
@@ -66,6 +67,34 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                 >
                   <Text style={[styles.themeBtnText, { color: isLight ? colors.buttonText : colors.subtitle }]}>
                     ☀️ Light
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Difficulty */}
+            <View style={styles.row}>
+              <View style={styles.labelGroup}>
+                <Text style={[styles.label, { color: colors.title }]}>Difficulty</Text>
+                <Text style={[styles.sublabel, { color: colors.subtitle }]}>
+                  {isHard ? 'Hidden layers + Reveal buttons' : 'All layers visible, no reveals'}
+                </Text>
+              </View>
+              <View style={[styles.themeToggle, { backgroundColor: bgColor }]}>
+                <TouchableOpacity
+                  style={[styles.themeBtn, !isHard && { backgroundColor: colors.buttonBg }]}
+                  onPress={() => setDifficulty('easy')}
+                >
+                  <Text style={[styles.themeBtnText, { color: !isHard ? colors.buttonText : colors.subtitle }]}>
+                    😊 Easy
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.themeBtn, isHard && { backgroundColor: colors.buttonBg }]}
+                  onPress={() => setDifficulty('hard')}
+                >
+                  <Text style={[styles.themeBtnText, { color: isHard ? colors.buttonText : colors.subtitle }]}>
+                    💀 Hard
                   </Text>
                 </TouchableOpacity>
               </View>

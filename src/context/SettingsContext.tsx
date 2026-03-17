@@ -62,12 +62,15 @@ const SKIN_OVERRIDES: Record<TubeSkin, Partial<ThemeColors>> = {
   space: { tubeGlass: 'rgba(50,0,100,0.1)', tubeBorder: '#320064', frostedTint: 'light' },
 };
 
+export type Difficulty = 'easy' | 'hard';
+
 export interface Settings {
   theme: Theme;
   soundVolume: number;    
   vibrationOn: boolean;
   skin: TubeSkin;
   timedModeEnabled: boolean;
+  difficulty: Difficulty;
 }
 
 interface SettingsContextType {
@@ -78,6 +81,7 @@ interface SettingsContextType {
   setVibration: (on: boolean) => void;
   setSkin: (skin: TubeSkin) => void;
   setTimedModeEnabled: (on: boolean) => void;
+  setDifficulty: (d: Difficulty) => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
@@ -89,6 +93,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     vibrationOn: true,
     skin: 'default',
     timedModeEnabled: false,
+    difficulty: 'easy',
   });
 
   const baseColors = settings.theme === 'dark' ? DARK_COLORS : LIGHT_COLORS;
@@ -107,6 +112,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setVibration: (vibrationOn) => setSettings(s => ({ ...s, vibrationOn })),
         setSkin: (skin) => setSettings(s => ({ ...s, skin })),
         setTimedModeEnabled: (timedModeEnabled) => setSettings(s => ({ ...s, timedModeEnabled })),
+        setDifficulty: (difficulty) => setSettings(s => ({ ...s, difficulty })),
       }}
     >
       {children}
